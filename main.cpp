@@ -7,7 +7,7 @@ using namespace cv;
 
 int main()
 {
-	Mat image = imread("images/right.png");
+	Mat image = imread("images/left_cam.png");
 
     if (image.empty()) {
         cout << "Could not open or find the image!" << endl;
@@ -15,17 +15,18 @@ int main()
     }
 
     Mat gray;
-    cvtColor(image, gray, COLOR_BGR2GRAY); // Convert to grayscale
+    cvtColor(image, gray, COLOR_BGR2GRAY);  //gray to detect corners
+
+    //GOTO parametres = 750 max pooints, 0.03 quality, 70 min distance pour les photos *_cam.png
 
     vector<Point2f> corners;
 	int maxCorners = 750;
-	double qualityLevel = 0.01;
-	double minDistance = 50;  
+	double qualityLevel = 0.03;
+	double minDistance = 70;  
     goodFeaturesToTrack(gray, corners, maxCorners, qualityLevel, minDistance);
 
-    // Draw the detected corners as green circles
     for (const Point2f& pt : corners) {
-        circle(image, pt, 5, Scalar(0, 255, 0), -1); // Green circle
+        circle(image, pt, 5, Scalar(0, 255, 0), -1);
     }
 
     imwrite("corners.png", image);

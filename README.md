@@ -1,2 +1,7 @@
 # vision-3d
-Ah ouais on va etre bien
+
+
+## Pour creer un executable Linux maybe avec opencv que tu dois download
+
+g++ main.cpp -o main `pkg-config --cflags --libs opencv4`
+

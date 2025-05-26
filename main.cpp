@@ -17,7 +17,7 @@ int main()
     Mat gray;
     cvtColor(image, gray, COLOR_BGR2GRAY);  //gray to detect corners
 
-    //GOTO parametres = 750 max pooints, 0.03 quality, 70 min distance pour les photos *_cam.png
+    //GOAT parametres = 750 max pooints, 0.03 quality, 70 min distance pour les photos *_cam.png
 
     vector<Point2f> corners;
 	int maxCorners = 750;

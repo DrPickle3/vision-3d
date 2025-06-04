@@ -66,6 +66,10 @@ int main()
 
     // GOAT parametres = 750 max pooints, 0.03 quality, 70 min distance pour les photos *_cam.png
 
+    // Pour faire notre fichier de points correspondant
+    // en assumant que points.txt et corners.txt soit trie par colonne
+    writeCorrespondingPoints();
+
     vector<Point2f> corners;
     int maxCorners = 750;
     double qualityLevel = 0.03;
@@ -109,8 +113,7 @@ int main()
     O.x = image.cols / 2.0f; // Om en pixels
     O.y = image.rows / 2.0f; // On en pixels
 
-    float Sx = 0.004f; // largeur physique d’un pixel (mm)
-    float Sy = 0.004f; // hauteur physique d’un pixel (mm)
+    float S = PIXEL_SIZE; // largeur physique d’un pixel (mm)
 
     vector<Point2f> realCorners;
     realCorners.reserve(corners.size());
@@ -118,19 +121,18 @@ int main()
     {
         float dx = pt.x - O.x; // (m_i − O_m)
         float dy = pt.y - O.y; // (n_i − O_n)
-        float xdi = dx * Sx;   // x_{d,i} = (m_i − O_m)·Sx
-        float ydi = dy * Sy;   // y_{d,i} = (n_i − O_n)·Sy
+        float xdi = dx * S;   // x_{d,i} = (m_i − O_m)·S
+        float ydi = dy * S;   // y_{d,i} = (n_i − O_n)·S
         realCorners.emplace_back(xdi, ydi);
     }
 
     // -------------------------------
     // Préparation des coordonnées 3D (Xs, Ys, Zs=0) de la mire
     // -------------------------------
-    // → Adaptez ces valeurs selon votre mire !
+    //
     int nbCols = 22;    // nombre de colonnes de la mire
     int nbRows = 32;    // nombre de lignes de la mire
-    double stepX = 8.0; // espacement horizontal (mm) entre deux coins
-    double stepY = 8.0; // espacement vertical   (mm) entre deux coins
+    double step = 8.0; // espacement (mm) entre deux coins
 
     int M = static_cast<int>(realCorners.size());
     if (M != nbCols * nbRows)
@@ -145,8 +147,8 @@ int main()
     {
         int ligne = i / nbCols;   // 0 ≤ ligne < nbRows
         int colonne = i % nbCols; // 0 ≤ colonne < nbCols
-        Xs[i] = colonne * stepX;  // Xs[i] en mm
-        Ys[i] = ligne * stepY;    // Ys[i] en mm
+        Xs[i] = colonne * step;  // Xs[i] en mm
+        Ys[i] = ligne * step;    // Ys[i] en mm
         // Zs[i] est implicitement 0
     }
 

@@ -49,6 +49,83 @@ vector<Point2f> filterCorners(vector<Point2f> corners)
     return filtered;
 }
 
+static int writeCorrespondingPoints()
+{
+    ifstream filePoints("points.txt");
+    if (!filePoints.is_open())
+    {
+        cerr << "Impossible d'ouvrir points.txt" << endl;
+        return -1;
+    }
+
+    vector<Point3f> points3D;
+    string line;
+
+    while (getline(filePoints, line))
+    {
+        replace(line.begin(), line.end(), ',', ' ');
+        istringstream iss(line);
+        float x, y, z;
+        if (iss >> x >> y >> z)
+        {
+            points3D.emplace_back(x, y, z);
+        }
+    }
+    filePoints.close();
+
+    ifstream fileCorners("corners.txt");
+    if (!fileCorners.is_open())
+    {
+        cerr << "Impossible d'ouvrir corners.txt" << endl;
+        return -1;
+    }
+
+    vector<Point3f> corners;
+    while (getline(fileCorners, line))
+    {
+        replace(line.begin(), line.end(), ',', ' ');
+        istringstream iss(line);
+        float u, v, w;
+        if (iss >> u >> v >> w)
+        {
+            corners.emplace_back(u, v, w);
+        }
+    }
+    fileCorners.close();
+
+    // Verifier que points.txt et corners.txt ont le meme nbre de points
+    if (points3D.size() != corners.size())
+    {
+        cerr << "Erreur : nombre de points 3D (" << points3D.size()
+             << ") et de coins 3D (" << corners.size() << ") différent." << endl;
+        return -1;
+    }
+
+    // Ecrire dans le fichier correspondingPoints.txt
+    ofstream fileCorrespondingPoints("correspondingPoints.txt");
+    if (!fileCorrespondingPoints.is_open())
+    {
+        cerr << "Impossible d'ouvrir correspondingPoints.txt pour écriture." << endl;
+        return -1;
+    }
+
+    for (size_t i = 0; i < points3D.size(); ++i)
+    {
+        fileCorrespondingPoints << points3D[i].x << " "
+                                << points3D[i].y << " "
+                                << points3D[i].z << " , "
+                                << corners[i].x << " "
+                                << corners[i].y << " "
+                                << corners[i].z << endl;
+    }
+
+    cout << "Fichier correspondingPoints.txt généré avec succès." << endl;
+    cout << "Nombre de points 3D lus : " << points3D.size() << endl;
+    cout << "Nombre de coins 3D lus : " << corners.size() << endl;
+
+    return 0;
+}
+
 int main()
 {
     const double PIXEL_SIZE = 0.00122; // https://www.samsung.com/uk/support/mobile-devices/check-out-the-new-camera-functions-of-the-galaxy-s22-series/
@@ -63,6 +140,11 @@ int main()
     }
     Mat gray;
     cvtColor(image, gray, COLOR_BGR2GRAY); // gray to detect corners
+
+    // Pour faire notre fichier de points correspondant
+    // en assumant que points.txt et corners.txt soit trie par colonne
+    writeCorrespondingPoints();
+    ////
 
     // GOAT parametres = 750 max pooints, 0.03 quality, 70 min distance pour les photos *_cam.png
 

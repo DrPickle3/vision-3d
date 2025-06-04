@@ -8,6 +8,7 @@ using namespace cv;
 
 int main()
 {
+    const double PIXEL_SIZE = 0.00122;
 	Mat image = imread("images/left.png");
 
     if (image.empty()) {

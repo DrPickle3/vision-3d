@@ -7,7 +7,7 @@ using namespace cv;
 
 int main()
 {
-	Mat image = imread("images/left_cam.png");
+	Mat image = imread("images/left.png");
 
     if (image.empty()) {
         cout << "Could not open or find the image!" << endl;
@@ -22,7 +22,7 @@ int main()
     vector<Point2f> corners;
 	int maxCorners = 750;
 	double qualityLevel = 0.03;
-	double minDistance = 70;  
+	double minDistance = 70;
     goodFeaturesToTrack(gray, corners, maxCorners, qualityLevel, minDistance);
 
     for (const Point2f& pt : corners) {

@@ -20,13 +20,13 @@ vector<Point2f> filterCorners(vector<Point2f> corners)
 
         for (size_t j = 0; j < corners.size(); ++j)
         {
-            if (i == j) //compare the corner with itself
+            if (i == j) // compare the corner with itself
                 continue;
-            if (norm(corners[i] - corners[j]) < distanceThreshold)  //if the corner is near (~180 px)
+            if (norm(corners[i] - corners[j]) < distanceThreshold) // if the corner is near (~180 px)
                 neighbors.push_back(corners[j]);
         }
 
-        if (neighbors.size() >= minNeighbors)   //min 3 because its a square
+        if (neighbors.size() >= minNeighbors) // min 3 because its a square
         {
             float minX = neighbors[0].x, maxX = neighbors[0].x;
             float minY = neighbors[0].y, maxY = neighbors[0].y;
@@ -36,13 +36,13 @@ vector<Point2f> filterCorners(vector<Point2f> corners)
                 minX = min(minX, p.x);
                 maxX = max(maxX, p.x);
                 minY = min(minY, p.y);
-                maxY = max(maxY, p.y);  
+                maxY = max(maxY, p.y);
             }
 
-            float spreadX = maxX - minX;    //bounding boxes maximums
+            float spreadX = maxX - minX; // bounding boxes maximums
             float spreadY = maxY - minY;
 
-            if (spreadX >= minSpreadX && spreadY >= minSpreadY) //only keep square neighbors
+            if (spreadX >= minSpreadX && spreadY >= minSpreadY) // only keep square neighbors
                 filtered.push_back(corners[i]);
         }
     }
@@ -51,8 +51,8 @@ vector<Point2f> filterCorners(vector<Point2f> corners)
 
 int main()
 {
-    const double PIXEL_SIZE = 0.00122; //https://www.samsung.com/uk/support/mobile-devices/check-out-the-new-camera-functions-of-the-galaxy-s22-series/
-    
+    const double PIXEL_SIZE = 0.00122; // https://www.samsung.com/uk/support/mobile-devices/check-out-the-new-camera-functions-of-the-galaxy-s22-series/
+
     // 1) Charger l’image et détecter les coins
     Mat image = imread("images/front.png");
 
@@ -70,9 +70,9 @@ int main()
     int maxCorners = 750;
     double qualityLevel = 0.03;
     double minDistance = 70;
-    goodFeaturesToTrack(gray, corners, maxCorners, qualityLevel, minDistance);  //Corners
+    goodFeaturesToTrack(gray, corners, maxCorners, qualityLevel, minDistance); // Corners
 
-    sort(corners.begin(), corners.end(),    //Sort column by column
+    sort(corners.begin(), corners.end(), // Sort column by column
          [](const Point2f &a, const Point2f &b)
          {
              if (fabs(a.x - b.x) > 1e-3)
@@ -80,16 +80,16 @@ int main()
              return a.y < b.y;
          });
 
-    vector<Point2f> filtered = filterCorners(corners); //exclude wrong corners
+    vector<Point2f> filtered = filterCorners(corners); // exclude wrong corners
 
-    for (const Point2f &pt : filtered)  //draw points
+    for (const Point2f &pt : filtered) // draw points
     {
         circle(image, pt, 5, Scalar(0, 255, 0), -1);
     }
     imwrite("corners.png", image);
     waitKey(0);
 
-    ofstream file("corners.txt");   //write points
+    ofstream file("corners.txt"); // write points
     if (!file.is_open())
     {
         cout << "Could not open the file!" << endl;
@@ -106,19 +106,20 @@ int main()
     // Étape 0 : passage pixel → repère image « réel »
     // -------------------------------
     Point2f O;
-    O.x = image.cols / 2.0f;   // Om en pixels
-    O.y = image.rows / 2.0f;   // On en pixels
+    O.x = image.cols / 2.0f; // Om en pixels
+    O.y = image.rows / 2.0f; // On en pixels
 
-    float Sx = 0.004f;  // largeur physique d’un pixel (mm)
-    float Sy = 0.004f;  // hauteur physique d’un pixel (mm)
+    float Sx = 0.004f; // largeur physique d’un pixel (mm)
+    float Sy = 0.004f; // hauteur physique d’un pixel (mm)
 
     vector<Point2f> realCorners;
     realCorners.reserve(corners.size());
-    for (const Point2f& pt : corners) {
-        float dx  = pt.x - O.x;   // (m_i − O_m)
-        float dy  = pt.y - O.y;   // (n_i − O_n)
-        float xdi = dx * Sx;      // x_{d,i} = (m_i − O_m)·Sx
-        float ydi = dy * Sy;      // y_{d,i} = (n_i − O_n)·Sy
+    for (const Point2f &pt : corners)
+    {
+        float dx = pt.x - O.x; // (m_i − O_m)
+        float dy = pt.y - O.y; // (n_i − O_n)
+        float xdi = dx * Sx;   // x_{d,i} = (m_i − O_m)·Sx
+        float ydi = dy * Sy;   // y_{d,i} = (n_i − O_n)·Sy
         realCorners.emplace_back(xdi, ydi);
     }
 
@@ -126,24 +127,26 @@ int main()
     // Préparation des coordonnées 3D (Xs, Ys, Zs=0) de la mire
     // -------------------------------
     // → Adaptez ces valeurs selon votre mire !
-    int nbCols   = 22;       // nombre de colonnes de la mire
-    int nbRows   = 32;       // nombre de lignes de la mire
-    double stepX = 8.0;      // espacement horizontal (mm) entre deux coins
-    double stepY = 8.0;      // espacement vertical   (mm) entre deux coins
+    int nbCols = 22;    // nombre de colonnes de la mire
+    int nbRows = 32;    // nombre de lignes de la mire
+    double stepX = 8.0; // espacement horizontal (mm) entre deux coins
+    double stepY = 8.0; // espacement vertical   (mm) entre deux coins
 
     int M = static_cast<int>(realCorners.size());
-    if (M != nbCols * nbRows) {
-        cout << "Erreur : M (" << M << ") != nbCols*nbRows (" 
+    if (M != nbCols * nbRows)
+    {
+        cout << "Erreur : M (" << M << ") != nbCols*nbRows ("
              << nbCols * nbRows << ") !" << endl;
         return -1;
     }
 
     vector<double> Xs(M), Ys(M);
-    for (int i = 0; i < M; ++i) {
-        int ligne   = i / nbCols;   // 0 ≤ ligne < nbRows
-        int colonne = i % nbCols;   // 0 ≤ colonne < nbCols
-        Xs[i] = colonne * stepX;    // Xs[i] en mm
-        Ys[i] = ligne   * stepY;    // Ys[i] en mm
+    for (int i = 0; i < M; ++i)
+    {
+        int ligne = i / nbCols;   // 0 ≤ ligne < nbRows
+        int colonne = i % nbCols; // 0 ≤ colonne < nbCols
+        Xs[i] = colonne * stepX;  // Xs[i] en mm
+        Ys[i] = ligne * stepY;    // Ys[i] en mm
         // Zs[i] est implicitement 0
     }
 
@@ -153,18 +156,19 @@ int main()
     Mat A = Mat::zeros(M, 5, CV_64F);
     Mat b = Mat::zeros(M, 1, CV_64F);
 
-    for (int i = 0; i < M; ++i) {
-        double X = Xs[i];               // X_{s,i} (mm)
-        double Y = Ys[i];               // Y_{s,i} (mm)
-        double x = realCorners[i].x;    // x_{d,i} (mm)
-        double y = realCorners[i].y;    // y_{d,i} (mm)
+    for (int i = 0; i < M; ++i)
+    {
+        double X = Xs[i];            // X_{s,i} (mm)
+        double Y = Ys[i];            // Y_{s,i} (mm)
+        double x = realCorners[i].x; // x_{d,i} (mm)
+        double y = realCorners[i].y; // y_{d,i} (mm)
 
         // Remplir la ligne i de A :  y·(a1·X + a2·Y + a3)  –  x·(a4·X + a5·Y + 1)  = 0
-        A.at<double>(i, 0) =  y * X;    // coeff. devant a1 = R11^c/Ty^c
-        A.at<double>(i, 1) =  y * Y;    // coeff. devant a2 = R12^c/Ty^c
-        A.at<double>(i, 2) =  y;        // coeff. devant a3 = T_x^c/Ty^c
-        A.at<double>(i, 3) = -x * X;    // coeff. devant a4 = R21^c/Ty^c
-        A.at<double>(i, 4) = -x * Y;    // coeff. devant a5 = R22^c/Ty^c
+        A.at<double>(i, 0) = y * X;  // coeff. devant a1 = R11^c/Ty^c
+        A.at<double>(i, 1) = y * Y;  // coeff. devant a2 = R12^c/Ty^c
+        A.at<double>(i, 2) = y;      // coeff. devant a3 = T_x^c/Ty^c
+        A.at<double>(i, 3) = -x * X; // coeff. devant a4 = R21^c/Ty^c
+        A.at<double>(i, 4) = -x * Y; // coeff. devant a5 = R22^c/Ty^c
 
         // Terme de droite = x_{d,i}
         b.at<double>(i, 0) = x;
@@ -175,42 +179,46 @@ int main()
     solve(A, b, a_hat, DECOMP_SVD);
 
     // Extraire a1…a5
-    double a1 = a_hat.at<double>(0, 0);  // R11^c/Ty^c
-    double a2 = a_hat.at<double>(1, 0);  // R12^c/Ty^c
-    double a3 = a_hat.at<double>(2, 0);  // T_x^c/Ty^c
-    double a4 = a_hat.at<double>(3, 0);  // R21^c/Ty^c
-    double a5 = a_hat.at<double>(4, 0);  // R22^c/Ty^c
+    double a1 = a_hat.at<double>(0, 0); // R11^c/Ty^c
+    double a2 = a_hat.at<double>(1, 0); // R12^c/Ty^c
+    double a3 = a_hat.at<double>(2, 0); // T_x^c/Ty^c
+    double a4 = a_hat.at<double>(3, 0); // R21^c/Ty^c
+    double a5 = a_hat.at<double>(4, 0); // R22^c/Ty^c
 
     // -------------------------------
     // Reconstruction partielle de R^c et T^c
     // -------------------------------
     // 1) Normaliser première ligne avec Ty1
-    double Ty1 = 1.0 / sqrt(a1*a1 + a2*a2);
+    double Ty1 = 1.0 / sqrt(a1 * a1 + a2 * a2);
     double r11c = a1 * Ty1;
     double r12c = a2 * Ty1;
-    double tmp1 = 1.0 - (r11c*r11c + r12c*r12c);
-    if (tmp1 < 0 && tmp1 > -1e-8) tmp1 = 0;
-    if (tmp1 < -1e-8) {
+    double tmp1 = 1.0 - (r11c * r11c + r12c * r12c);
+    if (tmp1 < 0 && tmp1 > -1e-8)
+        tmp1 = 0;
+    if (tmp1 < -1e-8)
+    {
         cout << "Erreur critique : r11^2 + r12^2 = "
-             << (r11c*r11c + r12c*r12c) << " > 1" << endl;
+             << (r11c * r11c + r12c * r12c) << " > 1" << endl;
         return -1;
     }
     double signS1 = +1.0;
-    double r13c   = signS1 * sqrt(tmp1);
+    double r13c = signS1 * sqrt(tmp1);
 
     // 2) Normaliser deuxième ligne avec Ty2 (indépendamment)
-    double Ty2 = 1.0 / sqrt(a4*a4 + a5*a5);
+    double Ty2 = 1.0 / sqrt(a4 * a4 + a5 * a5);
     double r21c = a4 * Ty2;
     double r22c = a5 * Ty2;
-    double tmp2 = 1.0 - (r21c*r21c + r22c*r22c);
-    if (tmp2 < 0 && tmp2 > -1e-8) tmp2 = 0;
-    if (tmp2 < -1e-8) {
+    double tmp2 = 1.0 - (r21c * r21c + r22c * r22c);
+    if (tmp2 < 0 && tmp2 > -1e-8)
+        tmp2 = 0;
+    if (tmp2 < -1e-8)
+    {
         cout << "Erreur critique : r21^2 + r22^2 = "
-             << (r21c*r21c + r22c*r22c) << " > 1" << endl;
+             << (r21c * r21c + r22c * r22c) << " > 1" << endl;
         return -1;
     }
     double signS2 = +1.0;
-    double r23c   = signS2 * sqrt(tmp2);
+    double r23c = signS2 * sqrt(tmp2);
 
     // 3) Troisième ligne par produit vectoriel
     Vec3d row1(r11c, r12c, r13c);

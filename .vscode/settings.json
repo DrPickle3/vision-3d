@@ -4,6 +4,9 @@
         "ostream": "cpp",
         "array": "cpp",
         "string_view": "cpp",
-        "span": "cpp"
+        "span": "cpp",
+        "iostream": "cpp",
+        "cmath": "cpp",
+        "complex": "cpp"
     }
 }

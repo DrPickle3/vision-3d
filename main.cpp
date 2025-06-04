@@ -17,15 +17,9 @@ int main()
     cvtColor(image, gray, COLOR_BGR2GRAY);
 
     vector<Point2f> corners;
-<<<<<<< Updated upstream
-	int maxCorners = 750;
-	double qualityLevel = 0.03;
-	double minDistance = 70;
-=======
     int    maxCorners   = 750;
     double qualityLevel = 0.03;
     double minDistance  = 70.0;
->>>>>>> Stashed changes
     goodFeaturesToTrack(gray, corners, maxCorners, qualityLevel, minDistance);
 
     // Afficher les coins détectés (facultatif)
@@ -33,10 +27,6 @@ int main()
         circle(image, pt, 5, Scalar(0, 255, 0), -1);
     }
     imwrite("corners.png", image);
-<<<<<<< Updated upstream
-    waitKey(0);
-	cout << corners.size() << endl;
-=======
     cout << "Nombre de coins détectés : " << corners.size() << endl;
 
     // 2) Trier par X puis par Y
@@ -190,6 +180,5 @@ int main()
     cout << " T^c = [" << txc << ", " << Tyc << ", (inconnu) ]\n";
     cout << "→ Passez à l’Étape 2 pour z' et Tz^c, puis l’Étape 3 pour k₁.\n";
 
->>>>>>> Stashed changes
     return 0;
 }

@@ -195,8 +195,8 @@ int main()
     float Sy = 0.004f; // hauteur physique d’un pixel (mm)
 
     vector<Point2f> realCorners;
-    realCorners.reserve(corners.size());
-    for (const Point2f &pt : corners)
+    realCorners.reserve(filtered.size());
+    for (const Point2f &pt : filtered)
     {
         float dx = pt.x - O.x; // (m_i − O_m)
         float dy = pt.y - O.y; // (n_i − O_n)

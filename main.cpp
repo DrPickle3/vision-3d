@@ -302,9 +302,18 @@ int main()
 
     double R13 = sqrt(1 - pow(R11, 2) - pow(R12, 2));
     double R23 = S_bizarre * sqrt(1 - pow(R21, 2) - pow(R22, 2));
-    double R31 = (1 - pow(R11, 2) - R12 * R21) / R13;
-    double R32 = (1 - R21 * R12 - pow(R22, 2)) / R23;
-    double R33 = sqrt(1 - R31 * R13 - R32 * R23);
+
+    cv::Vec3d row1(R11, R12, R13);
+    cv::Vec3d row2(R21, R22, R23);
+    cv::Vec3d row3 = row1.cross(row2);  // assure orthogonalité
+
+// Puis normalise chaque ligne si nécessaire
+    double R31 = row3[0];
+    double R32 = row3[1];
+    double R33 = row3[2];
+    // double R31 = (1 - pow(R11, 2) - R12 * R21) / R13;
+    // double R32 = (1 - R21 * R12 - pow(R22, 2)) / R23;
+    // double R33 = sqrt(1 - R31 * R13 - R32 * R23);
 
     // trouver z prime et Tzc
     int n = points3D.size();

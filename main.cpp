@@ -135,16 +135,16 @@ static int writeCorrespondingPoints()
 
 double getTy(double r11, double r12, double r21, double r22)
 {
-    double condition = r11 * r22 - r12 * r21;
-    double condition2 = r11 * r11 + r21 * r21;
-    double condition3 = r12 * r12 + r22 * r22;
-    double condition4 = r21 * r21 + r22 * r22;
-    double condition5 = r11 * r11 + r12 * r12;
+    double condition1 = r11 * r22 - r12 * r21;
+    double condition2 = pow(r11, 2) + pow(r21, 2);
+    double condition3 = pow(r12, 2) + pow(r22, 2);
+    double condition4 = pow(r21, 2) + pow(r22, 2);
+    double condition5 = pow(r11, 2) + pow(r12, 2);
 
-    if (condition != 0)
+    if (condition1 != 0)
     {
-        double S = r11 * r11 + r12 * r12 + r21 * r21 + r22 * r22;
-        return sqrt((S - sqrt(pow(S, 2) - 4 * pow(condition, 2))) / (2 * pow(condition, 2)));
+        double S = pow(r11, 2) + pow(r12, 2) + pow(r21, 2) + pow(r22, 2);
+        return sqrt((S - sqrt(pow(S, 2) - 4 * pow(condition1, 2))) / (2 * pow(condition1, 2)));
     }
     else if (condition2 != 0)
     {
@@ -170,7 +170,7 @@ int main()
     const double PIXEL_SIZE = 0.00122; // https://www.samsung.com/uk/support/mobile-devices/check-out-the-new-camera-functions-of-the-galaxy-s22-series/
 
     // 1) Charger l’image et détecter les coins
-    Mat image = imread("images/left.png");
+    Mat image = imread("images/front.png");
 
     if (image.empty())
     {
@@ -188,15 +188,15 @@ int main()
     double minDistance = 70;
     goodFeaturesToTrack(gray, corners, maxCorners, qualityLevel, minDistance); // Corners
 
-    sort(corners.begin(), corners.end(), // Sort column by column
+    vector<Point2f> cornersPixelCoordinates = filterCorners(corners); // exclude wrong corners
+
+    sort(cornersPixelCoordinates.begin(), cornersPixelCoordinates.end(), // Sort column by column
          [](const Point2f &a, const Point2f &b)
          {
-             if (fabs(a.x - b.x) > 1e-3)
-                 return a.x < b.x;
-             return a.y < b.y;
+             if (fabs(a.y - b.y) > 1e-3)
+                 return a.y < b.y;
+             return a.x < b.x;
          });
-
-    vector<Point2f> filtered = filterCorners(corners); // exclude wrong corners
 
     ofstream file("corners.txt"); // write points
     if (!file.is_open())
@@ -205,7 +205,7 @@ int main()
         return -1;
     }
 
-    for (const Point2f &pt : filtered)
+    for (const Point2f &pt : cornersPixelCoordinates)
     {
         file << pt.x << "," << pt.y << "," << "0" << endl;
     }
@@ -224,30 +224,28 @@ int main()
 
     float S = PIXEL_SIZE; // largeur physique d’un pixel (mm)
 
-    vector<Point2f> realCorners; // points dans le repere image reelle
-    realCorners.reserve(filtered.size());
-    for (const Point2f &pt : filtered)
-    {
-        float xdi = (pt.x - O.x) * S;
-        float ydi = (pt.y - O.y) * S;
-        realCorners.emplace_back(xdi, ydi);
-    }
-
-    int M = static_cast<int>(realCorners.size());
+    // vector<Point2f> realCorners; // points dans le repere image reelle
+    // realCorners.reserve(cornersPixelCoordinates.size());
+    // for (const Point2f &pt : cornersPixelCoordinates)
+    // {
+    //     float xdi = (pt.x - O.x) * S;
+    //     float ydi = (pt.y - O.y) * S;
+    //     realCorners.emplace_back(xdi, ydi);
+    // }
     vector<Point3f> points3D = getPoints();
 
     // -------------------------------
     // Étape 1 de Tsai : construire A et b pour a1…a5
     // -------------------------------
-    Mat A = Mat::zeros(M, 5, CV_64F);
-    Mat b = Mat::zeros(M, 1, CV_64F);
+    Mat A = Mat::zeros(cornersPixelCoordinates.size(), 5, CV_64F);
+    Mat b = Mat::zeros(cornersPixelCoordinates.size(), 1, CV_64F);
 
-    for (int i = 0; i < M; ++i)
+    for (int i = 0; i < cornersPixelCoordinates.size(); ++i)
     {
-        double X = points3D[i].x;    // X_{s,i} (mm)
-        double Y = points3D[i].y;    // Y_{s,i} (mm)
-        double x = realCorners[i].x; // x_{d,i} (mm)
-        double y = realCorners[i].y; // y_{d,i} (mm)
+        double X = points3D[i].x;                // X_{s,i} (mm)
+        double Y = points3D[i].y;                // Y_{s,i} (mm)
+        double x = cornersPixelCoordinates[i].x; // x_{d,i} (mm)
+        double y = cornersPixelCoordinates[i].y; // y_{d,i} (mm)
 
         A.at<double>(i, 0) = y * X;  // coeff. devant a1 = R11^c/Ty^c
         A.at<double>(i, 1) = y * Y;  // coeff. devant a2 = R12^c/Ty^c
@@ -286,7 +284,7 @@ int main()
     double testX = R11 * points3D[0].x + R12 * points3D[0].y + Txc;
     double testY = R21 * points3D[0].x + R22 * points3D[0].y + Tyc;
 
-    if (testX * realCorners[0].x < 0 || testY * realCorners[0].y < 0)
+    if (testX * cornersPixelCoordinates[0].x < 0 || testY * cornersPixelCoordinates[0].y < 0)
     {
         Tyc *= -1;
         R11 *= -1;
@@ -296,26 +294,25 @@ int main()
         Txc *= -1;
     }
 
-    double S_bizarre = 1;
-    if (R11 * R21 + R12 * R22 < 0)
-        S_bizarre *= -1;
+    double signe = 1;
+    if (R11 * R21 + R12 * R22 >= 0)
+        signe *= -1;
 
     double R13 = sqrt(1 - pow(R11, 2) - pow(R12, 2));
-    double R23 = S_bizarre * sqrt(1 - pow(R21, 2) - pow(R22, 2));
-
-    cv::Vec3d row1(R11, R12, R13);
-    cv::Vec3d row2(R21, R22, R23);
-    cv::Vec3d row3 = row1.cross(row2);  // assure orthogonalité
-
-// Puis normalise chaque ligne si nécessaire
-    double R31 = row3[0];
-    double R32 = row3[1];
-    double R33 = row3[2];
+    double R23 = signe * sqrt(1 - pow(R21, 2) - pow(R22, 2));
     // double R31 = (1 - pow(R11, 2) - R12 * R21) / R13;
     // double R32 = (1 - R21 * R12 - pow(R22, 2)) / R23;
     // double R33 = sqrt(1 - R31 * R13 - R32 * R23);
 
-    // trouver z prime et Tzc
+    Vec3d r1(R11, R12, R13);
+    Vec3d r2(R21, R22, R23);
+    Vec3d r3 = r1.cross(r2); // produit vectoriel pour garantir orthogonalité
+    r3 = r3 / norm(r3);
+    double R31 = r3[0];
+    double R32 = r3[1];
+    double R33 = r3[2];
+
+    // trouver Tzc
     int n = points3D.size();
     Mat C(n, 2, CV_64F);
     Mat D(n, 1, CV_64F);
@@ -324,14 +321,14 @@ int main()
     {
         double X = points3D[i].x;
         double Y = points3D[i].y;
-        double x = realCorners[i].x;
-        double y = realCorners[i].y;
+        double x = cornersPixelCoordinates[i].x;
+        double y = cornersPixelCoordinates[i].y;
 
         double Yi = R21 * X + R22 * Y + Tyc;
         double Wi = R31 * X + R32 * Y;
 
-        C.at<double>(i, 0) = Yi - y;
-        C.at<double>(i, 1) = 1.0;
+        C.at<double>(i, 0) = Yi;
+        C.at<double>(i, 1) = -y;
         D.at<double>(i, 0) = Wi * y;
     }
 
@@ -351,16 +348,19 @@ int main()
         R32 *= -1;
     }
 
-    for (int i = 0; i < points3D.size(); i++)
+    for (int i = 0; i < 704; i++)
     {
-        double x = zPrime * ((R11 * points3D[i].x + R12 * points3D[i].y + Txc) / (R31 * points3D[i].x + R32 * points3D[i].y + Tzc));
-        double y = zPrime * ((R21 * points3D[i].x + R22 * points3D[i].y + Tyc) / (R31 * points3D[i].x + R32 * points3D[i].y + Tzc));
+        double x = zPrime / S * ((R11 * points3D[i].x + R12 * points3D[i].y + Txc) / (R31 * points3D[i].x + R32 * points3D[i].y + Tzc)) + O.x;
+        double y = -zPrime / S * ((R21 * points3D[i].x + R22 * points3D[i].y + Tyc) / (R31 * points3D[i].x + R32 * points3D[i].y + Tzc)) + O.y;
 
-        int x_pixel = static_cast<int>(x / PIXEL_SIZE + O.x);
-        int y_pixel = static_cast<int>(y / PIXEL_SIZE + O.y);
-        Point2f pt(x_pixel, y_pixel);
+
+        cout << x << " " << y << endl;
+
+        Point2f pt(x, y);
         circle(image, pt, 5, Scalar(0, 255, 0), -1);
     }
+
+    cout << zPrime << endl;
 
     double norm_row1 = std::sqrt(R11 * R11 + R12 * R12 + R13 * R13);
     double norm_row2 = std::sqrt(R21 * R21 + R22 * R22 + R23 * R23);

@@ -75,64 +75,6 @@ vector<Point3f> getPoints()
     return points3D;
 }
 
-static int writeCorrespondingPoints()
-{
-    vector<Point3f> points3D = getPoints();
-
-    ifstream fileCorners("corners.txt");
-    if (!fileCorners.is_open())
-    {
-        cerr << "Impossible d'ouvrir corners.txt" << endl;
-        return -1;
-    }
-
-    vector<Point3f> corners;
-    string line;
-
-    while (getline(fileCorners, line))
-    {
-        replace(line.begin(), line.end(), ',', ' ');
-        istringstream iss(line);
-        float u, v, w;
-        if (iss >> u >> v >> w)
-        {
-            corners.emplace_back(u, v, w);
-        }
-    }
-    fileCorners.close();
-
-    // Verifier que points.txt et corners.txt ont le meme nbre de points
-    if (points3D.size() != corners.size())
-    {
-        cerr << "Erreur : nombre de points 3D (" << points3D.size()
-             << ") et de coins 3D (" << corners.size() << ") différent." << endl;
-        return -1;
-    }
-
-    // Ecrire dans le fichier correspondingPoints.txt
-    ofstream fileCorrespondingPoints("correspondingPoints.txt");
-    if (!fileCorrespondingPoints.is_open())
-    {
-        cerr << "Impossible d'ouvrir correspondingPoints.txt pour écriture." << endl;
-        return -1;
-    }
-
-    for (size_t i = 0; i < points3D.size(); ++i)
-    {
-        fileCorrespondingPoints << points3D[i].x << " "
-                                << points3D[i].y << " "
-                                << points3D[i].z << " , "
-                                << corners[i].x << " "
-                                << corners[i].y << " "
-                                << corners[i].z << endl;
-    }
-
-    cout << "Fichier correspondingPoints.txt généré avec succès." << endl;
-    cout << "Nombre de mises en correspondances : " << points3D.size() << endl;
-
-    return 0;
-}
-
 double getTy(double r11, double r12, double r21, double r22)
 {
     double condition1 = r11 * r22 - r12 * r21;
@@ -193,7 +135,7 @@ int main()
     sort(cornersPixelCoordinates.begin(), cornersPixelCoordinates.end(), // Sort column by column
          [](const Point2f &a, const Point2f &b)
          {
-             if (fabs(a.y - b.y) > 1e-3)
+             if (fabs(a.y - b.y) > 30)
                  return a.y < b.y;
              return a.x < b.x;
          });
@@ -211,28 +153,22 @@ int main()
     }
     file.close();
 
-    // Pour faire notre fichier de points correspondant
-    // en assumant que points.txt et corners.txt soit trie par colonne
-    writeCorrespondingPoints();
-
-    // -------------------------------
-    // Étape 0 : passage pixel → repère image « réel »
-    // -------------------------------
     Point2f O;
     O.x = image.cols / 2.0f; // Om en pixels
     O.y = image.rows / 2.0f; // On en pixels
 
     float S = PIXEL_SIZE; // largeur physique d’un pixel (mm)
 
-    // vector<Point2f> realCorners; // points dans le repere image reelle
-    // realCorners.reserve(cornersPixelCoordinates.size());
-    // for (const Point2f &pt : cornersPixelCoordinates)
-    // {
-    //     float xdi = (pt.x - O.x) * S;
-    //     float ydi = (pt.y - O.y) * S;
-    //     realCorners.emplace_back(xdi, ydi);
-    // }
     vector<Point3f> points3D = getPoints();
+
+    vector<Point2f> realCorners; // points dans le repere image reelle
+    realCorners.reserve(cornersPixelCoordinates.size());
+    for (const Point2f &pt : cornersPixelCoordinates)
+    {
+        float xdi = (pt.x - O.x) * S;
+        float ydi = (pt.y - O.y) * S;
+        realCorners.emplace_back(xdi, ydi);
+    }
 
     // -------------------------------
     // Étape 1 de Tsai : construire A et b pour a1…a5
@@ -242,10 +178,10 @@ int main()
 
     for (int i = 0; i < cornersPixelCoordinates.size(); ++i)
     {
-        double X = points3D[i].x;                // X_{s,i} (mm)
-        double Y = points3D[i].y;                // Y_{s,i} (mm)
-        double x = cornersPixelCoordinates[i].x; // x_{d,i} (mm)
-        double y = cornersPixelCoordinates[i].y; // y_{d,i} (mm)
+        double X = points3D[i].x;    // X_{s,i} (mm)
+        double Y = points3D[i].y;    // Y_{s,i} (mm)
+        double x = realCorners[i].x; // x_{d,i} (mm)
+        double y = realCorners[i].y; // y_{d,i} (mm)
 
         A.at<double>(i, 0) = y * X;  // coeff. devant a1 = R11^c/Ty^c
         A.at<double>(i, 1) = y * Y;  // coeff. devant a2 = R12^c/Ty^c
@@ -268,11 +204,6 @@ int main()
     double r21 = a_hat.at<double>(3, 0); // R21^c/Ty^c
     double r22 = a_hat.at<double>(4, 0); // R22^c/Ty^c
 
-    // -------------------------------
-    // Reconstruction partielle de R^c et T^c
-    // -------------------------------
-    // 1) Normaliser première ligne avec Ty1
-
     double Tyc = getTy(r11, r12, r21, r22);
 
     double R11 = r11 * Tyc;
@@ -284,7 +215,7 @@ int main()
     double testX = R11 * points3D[0].x + R12 * points3D[0].y + Txc;
     double testY = R21 * points3D[0].x + R22 * points3D[0].y + Tyc;
 
-    if (testX * cornersPixelCoordinates[0].x < 0 || testY * cornersPixelCoordinates[0].y < 0)
+    if (testX * realCorners[0].x < 0 || testY * realCorners[0].y < 0)
     {
         Tyc *= -1;
         R11 *= -1;
@@ -300,17 +231,9 @@ int main()
 
     double R13 = sqrt(1 - pow(R11, 2) - pow(R12, 2));
     double R23 = signe * sqrt(1 - pow(R21, 2) - pow(R22, 2));
-    // double R31 = (1 - pow(R11, 2) - R12 * R21) / R13;
-    // double R32 = (1 - R21 * R12 - pow(R22, 2)) / R23;
-    // double R33 = sqrt(1 - R31 * R13 - R32 * R23);
-
-    Vec3d r1(R11, R12, R13);
-    Vec3d r2(R21, R22, R23);
-    Vec3d r3 = r1.cross(r2); // produit vectoriel pour garantir orthogonalité
-    r3 = r3 / norm(r3);
-    double R31 = r3[0];
-    double R32 = r3[1];
-    double R33 = r3[2];
+    double R31 = (1 - pow(R11, 2) - R12 * R21) / R13;
+    double R32 = (1 - R21 * R12 - pow(R22, 2)) / R23;
+    double R33 = sqrt(1 - R31 * R13 - R32 * R23);
 
     // trouver Tzc
     int n = points3D.size();
@@ -321,8 +244,8 @@ int main()
     {
         double X = points3D[i].x;
         double Y = points3D[i].y;
-        double x = cornersPixelCoordinates[i].x;
-        double y = cornersPixelCoordinates[i].y;
+        double x = realCorners[i].x;
+        double y = realCorners[i].y;
 
         double Yi = R21 * X + R22 * Y + Tyc;
         double Wi = R31 * X + R32 * Y;
@@ -348,27 +271,228 @@ int main()
         R32 *= -1;
     }
 
-    for (int i = 0; i < 704; i++)
+    double k1 = 0.0;        // on part de k1 = 0
+    double zprime = zPrime; // valeur de l’étape 2.i (devrait être positive)
+    double Tz_curr = Tzc;   // valeur de l’étape 2.i
+
+    // Paramètres LM
+    double tau = 1e-3;   // on choisit τ=10^-3
+    double eps1 = 1e-8;  // tolérance sur ‖g‖∞
+    double eps2 = 1e-12; // tolérance sur ‖Δp‖
+    int maxIterLM = 200; // nombre max d’itérations
+    double lambdaLM;     // mu
+    double nu = 2.0;     // facteur d’ajustement
+
+    // Construction du vecteur initial des résidus et Jacobien
+    cv::Mat rVec; // (M x 1)
+    cv::Mat Jmat; // (M x 3)
+
+    // Calcul initial du Jacobien et du gradient pour p^(0)
+    // On remplit rVec et Jmat via une fonction lambda :
+    auto computeResidualsAndJacobian = [&](
+                                           const double &k1_loc,
+                                           const double &z_loc,
+                                           const double &Tz_loc,
+                                           cv::Mat &rOut, // (M x 1) résidus
+                                           cv::Mat &JOut  // (M x 3) Jacobien
+                                       )
     {
-        double x = zPrime / S * ((R11 * points3D[i].x + R12 * points3D[i].y + Txc) / (R31 * points3D[i].x + R32 * points3D[i].y + Tzc)) + O.x;
-        double y = -zPrime / S * ((R21 * points3D[i].x + R22 * points3D[i].y + Tyc) / (R31 * points3D[i].x + R32 * points3D[i].y + Tzc)) + O.y;
+        // Préallouer la taille
+        if (rOut.rows != points3D.size() || rOut.cols != 1)
+            rOut = cv::Mat::zeros(points3D.size(), 1, CV_64F);
+        if (JOut.rows != points3D.size() || JOut.cols != 3)
+            JOut = cv::Mat::zeros(points3D.size(), 3, CV_64F);
 
+        for (int i = 0; i < points3D.size(); ++i)
+        {
+            // 1) Coordonnées 3D sur la mire (Zs=0)
+            double Xi = points3D[i].x;
+            double Yi = points3D[i].y;
+            double Zi = 0.0;
 
-        cout << x << " " << y << endl;
+            // 2) Coordonnées « réelles » détectées (en mm)
+            double xdi = static_cast<double>(realCorners[i].x);
+            double ydi = static_cast<double>(realCorners[i].y);
 
-        Point2f pt(x, y);
-        circle(image, pt, 5, Scalar(0, 255, 0), -1);
+            // 3) r_i^2
+            double r2 = xdi * xdi + ydi * ydi;
+
+            // 4) Num_i et Den_i
+            double Num_i = R11 * Xi + R12 * Yi + Txc;    // = R^c_11 X + R^c_12 Y + T^c_x
+            double Den_i = R31 * Xi + R32 * Yi + Tz_loc; // = R^c_31 X + R^c_32 Y + T^c_z
+
+            // Éviter division par zéro
+            if (fabs(Den_i) < 1e-12)
+                Den_i = (Den_i >= 0 ? 1e-12 : -1e-12);
+
+            // 5) résidu e_i(p) = xdi*(1 + k1_loc*r2)*Den_i  -  Num_i * z_loc
+            double resid_i = xdi * (1.0 + k1_loc * r2) * Den_i - (Num_i * z_loc);
+            rOut.at<double>(i, 0) = resid_i;
+
+            // 6) calcul des dérivées partielles
+            double d_e_d_k1 = xdi * r2 * Den_i;
+            double d_e_d_z = -Num_i;
+            double d_e_d_Tz = xdi * (1.0 + k1_loc * r2);
+
+            JOut.at<double>(i, 0) = d_e_d_k1;
+            JOut.at<double>(i, 1) = d_e_d_z;
+            JOut.at<double>(i, 2) = d_e_d_Tz;
+        }
+    };
+
+    // Premier calcul de rVec et Jmat en p^(0)
+    computeResidualsAndJacobian(k1, zprime, Tz_curr, rVec, Jmat);
+
+    // A = J^T J  (3×3),  g = J^T r  (3×1)
+    cv::Mat A_lsq = Jmat.t() * Jmat; // Hessienne approchée (3×3)
+    cv::Mat g_lsq = Jmat.t() * rVec; // gradient (3×1)
+
+    // Initialisation de lambdaLM (mu)
+    {
+        double maxDiag = std::max({fabs(A_lsq.at<double>(0, 0)),
+                                   fabs(A_lsq.at<double>(1, 1)),
+                                   fabs(A_lsq.at<double>(2, 2))});
+        lambdaLM = tau * maxDiag;
     }
 
-    cout << zPrime << endl;
+    // Calcul initial du coût E_old = ‖e(p)‖²
+    double E_old = 0.0;
+    for (int i = 0; i < points3D.size(); ++i)
+    {
+        double rv = rVec.at<double>(i, 0);
+        E_old += rv * rv;
+    }
 
-    double norm_row1 = std::sqrt(R11 * R11 + R12 * R12 + R13 * R13);
-    double norm_row2 = std::sqrt(R21 * R21 + R22 * R22 + R23 * R23);
-    double norm_row3 = std::sqrt(R31 * R31 + R32 * R32 + R33 * R33);
+    bool found = false;
+    int iter = 0;
 
-    cout << "row 1: " << R11 << " " << R12 << " " << R13 << " " << endl;
-    cout << "row 2: " << R21 << " " << R22 << " " << R23 << " " << endl;
-    cout << "row 3: " << R31 << " " << R32 << " " << R33 << " " << endl;
+    // Levenberg–Marquardt
+    while (!found && iter < maxIterLM)
+    {
+        ++iter;
+
+        // 1) résolution (A + lambda·I)·Δp = -g
+        cv::Mat H_lm = A_lsq.clone();
+        H_lm.at<double>(0, 0) += lambdaLM;
+        H_lm.at<double>(1, 1) += lambdaLM;
+        H_lm.at<double>(2, 2) += lambdaLM;
+
+        cv::Mat minus_g = -1.0 * g_lsq; // (3×1)
+        cv::Mat deltaP;                 // (3×1)
+
+        bool solved = cv::solve(H_lm, minus_g, deltaP, cv::DECOMP_CHOLESKY);
+        if (!solved)
+        {
+            cv::solve(H_lm, minus_g, deltaP, cv::DECOMP_SVD);
+        }
+
+        // 2) si le pas est trop petit, on arrête
+        double norm_dp = sqrt(
+            deltaP.at<double>(0, 0) * deltaP.at<double>(0, 0) +
+            deltaP.at<double>(1, 0) * deltaP.at<double>(1, 0) +
+            deltaP.at<double>(2, 0) * deltaP.at<double>(2, 0));
+        double norm_p = sqrt(k1 * k1 + zprime * zprime + Tz_curr * Tz_curr);
+        if (norm_dp <= eps2 * norm_p)
+        {
+            found = true;
+            break;
+        }
+
+        // 3) proposer p_new = p + Δp
+        double k1_new = k1 + deltaP.at<double>(0, 0);
+        double zprime_new = zprime + deltaP.at<double>(1, 0);
+        double Tz_new = Tz_curr + deltaP.at<double>(2, 0);
+
+        // 4) calculer le nouveau coût E_new
+        cv::Mat rVec_new, Jmat_dummy;
+        computeResidualsAndJacobian(k1_new, zprime_new, Tz_new, rVec_new, Jmat_dummy);
+        double E_new = 0.0;
+        for (int i = 0; i < points3D.size(); ++i)
+        {
+            double rv = rVec_new.at<double>(i, 0);
+            E_new += rv * rv;
+        }
+
+        // ρ = (E_old – E_new) / [ Δpᵀ (λ·Δp – g) ]
+        cv::Mat temp = (lambdaLM * deltaP) - g_lsq; // (3×1)
+        double denom_rho = deltaP.at<double>(0, 0) * temp.at<double>(0, 0) + deltaP.at<double>(1, 0) * temp.at<double>(1, 0) + deltaP.at<double>(2, 0) * temp.at<double>(2, 0);
+        double rho = 0.0;
+        if (fabs(denom_rho) > 1e-15)
+            rho = (E_old - E_new) / denom_rho;
+        else
+            rho = -1.0; // pas valide
+
+        // 5) décision : accepter ou rejeter le pas
+        if (rho > 0.0)
+        {
+            // acceptation du pas
+            k1 = k1_new;
+            zprime = zprime_new;
+            Tz_curr = Tz_new;
+
+            // mise à jour de λ
+            double factor = 1.0 - pow(2.0 * rho - 1.0, 3);
+            factor = max(1.0 / 3.0, factor);
+            lambdaLM = lambdaLM * factor;
+            nu = 2.0;
+
+            // mise à jour de E_old
+            E_old = E_new;
+
+            // recalculer rVec et Jmat, A_lsq, g_lsq
+            computeResidualsAndJacobian(k1, zprime, Tz_curr, rVec, Jmat);
+            A_lsq = Jmat.t() * Jmat;
+            g_lsq = Jmat.t() * rVec;
+        }
+        else
+        {
+            // rejet du pas : on reste sur p
+            lambdaLM = lambdaLM * nu;
+            nu = nu * 2.0;
+        }
+
+        // 6) critère d’arrêt sur le gradient
+        double maxAbs_g = max({fabs(g_lsq.at<double>(0, 0)),
+                               fabs(g_lsq.at<double>(1, 0)),
+                               fabs(g_lsq.at<double>(2, 0))});
+        if (maxAbs_g < eps1)
+        {
+            found = true;
+            break;
+        }
+    }
+
+    double reprojectionErrorSum = 0.0;
+    for (int i = 0; i < points3D.size(); ++i)
+    {
+        double Xi = points3D[i].x;
+        double Yi = points3D[i].y;
+        double Zi = 0.0;
+
+        // projection linéaire “idéale”
+        double Den_i = R31 * Xi + R32 * Yi + Tz_curr;
+        if (fabs(Den_i) < 1e-12)
+            Den_i = (Den_i >= 0 ? 1e-12 : -1e-12);
+
+        double x_c = ((R11 * Xi + R12 * Yi + Txc) / Den_i) * zprime;
+        double y_c = ((R21 * Xi + R22 * Yi + Tyc) / Den_i) * zprime;
+
+        // on applique la distorsion radiale
+        double r2_c = x_c * x_c + y_c * y_c;
+        double x_d_pred = x_c * (1.0 + k1 * r2_c);
+        double y_d_pred = y_c * (1.0 + k1 * r2_c);
+
+        // retour en pixels
+        double u = x_d_pred * (1.0 / S) + O.x;
+        double v = y_d_pred * (1.0 / S) + O.y;
+
+        int ui = static_cast<int>(round(u));
+        int vi = static_cast<int>(round(v));
+        circle(image, Point(ui, vi), 7, Scalar(0, 255, 0), -1);
+        double dx = cornersPixelCoordinates[i].x - u;
+        double dy = cornersPixelCoordinates[i].y - v;
+        reprojectionErrorSum += dx * dx + dy * dy;
+    }
 
     imwrite("corners.png", image);
     waitKey(0);

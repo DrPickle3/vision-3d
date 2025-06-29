@@ -99,7 +99,7 @@ void invert_rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::P
             double oldX = p.at<double>(0, 0) / S.x + O.x;
             double oldY = p.at<double>(1, 0) / S.y + O.y;
 
-            if (oldX >= 0 && oldX < image.cols && oldY >= 0 && oldY < image.rows)
+            if (oldX >= -1 && oldX < image.cols + 1 && oldY >= -1 && oldY < image.rows + 1)
             {
                 cv::Point2d p1(std::floor(oldX), std::floor(oldY));
                 cv::Point2d p2(std::floor(oldX), std::ceil(oldY));
@@ -111,36 +111,30 @@ void invert_rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::P
                 double dx = oldX - std::floor(oldX);
                 double dy = oldY - std::floor(oldY);
 
-                double k1 = (1 - dx) * (1 - dy);
+                if (p1.x >= 0 && p1.y >= 0)
+                {
+                    double k1 = (1 - dx) * (1 - dy);
+                    cv::Vec3b c = image.at<cv::Vec3b>(p1.y, p1.x);
+                    value += k1 * cv::Vec3d(c);
+                }
 
-                cv::Vec3b c1 = image.at<cv::Vec3b>(p1.y, p1.x);
-                value[0] += k1 * c1[0];
-                value[1] += k1 * c1[1];
-                value[2] += k1 * c1[2];
-
-                if (p2.y < image.rows)
+                if (p2.x >= 0 && p2.y < image.rows)
                 {
                     double k2 = (1 - dx) * dy;
                     cv::Vec3b c = image.at<cv::Vec3b>(p2.y, p2.x);
-                    value[0] += k2 * c[0];
-                    value[1] += k2 * c[1];
-                    value[2] += k2 * c[2];
+                    value += k2 * cv::Vec3d(c);
                 }
-                if (p3.x < image.cols)
+                if (p3.x < image.cols && p3.y >= 0)
                 {
                     double k3 = dx * (1 - dy);
                     cv::Vec3b c = image.at<cv::Vec3b>(p3.y, p3.x);
-                    value[0] += k3 * c[0];
-                    value[1] += k3 * c[1];
-                    value[2] += k3 * c[2];
+                    value += k3 * cv::Vec3d(c);
                 }
                 if (p4.x < image.cols && p4.y < image.rows)
                 {
                     double k4 = dx * dy;
                     cv::Vec3b c = image.at<cv::Vec3b>(p4.y, p4.x);
-                    value[0] += k4 * c[0];
-                    value[1] += k4 * c[1];
-                    value[2] += k4 * c[2];
+                    value += k4 * cv::Vec3d(c);
                 }
 
                 image_rectified.at<cv::Vec3b>(y, x) = value;

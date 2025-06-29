@@ -117,7 +117,6 @@ void invert_rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::P
                     cv::Vec3b c = image.at<cv::Vec3b>(p1.y, p1.x);
                     value += k1 * cv::Vec3d(c);
                 }
-
                 if (p2.x >= 0 && p2.y < image.rows)
                 {
                     double k2 = (1 - dx) * dy;

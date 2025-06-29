@@ -96,10 +96,10 @@ void invert_rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::P
 
             cv::Mat p = (qz / Q.at<double>(2, 0)) * Q;
 
-            double oldX = p.at<double>(0, 0) / S.x + O.x;
+            double oldX = p.at<double>(0, 0) / S.x + O.x;   //transformation inverse vers image originale
             double oldY = p.at<double>(1, 0) / S.y + O.y;
 
-            if (oldX >= -1 && oldX < image.cols + 1 && oldY >= -1 && oldY < image.rows + 1)
+            if (oldX >= -1 && oldX < image.cols + 1 && oldY >= -1 && oldY < image.rows + 1) //Interpolation bilineaire
             {
                 cv::Point2d p1(std::floor(oldX), std::floor(oldY));
                 cv::Point2d p2(std::floor(oldX), std::ceil(oldY));

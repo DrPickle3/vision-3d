@@ -1,6 +1,9 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
+using namespace cv;
+using namespace std;
+
 // Caméra de gauche
 cv::Mat R_cam_g = (cv::Mat_<double>(3, 3) << 0.9962, 0, -0.0872,
                    0, 0.9962, 0,
@@ -40,6 +43,22 @@ int main()
     Posons T = Tg - R**t*Td:
         Pd = R(Pg - T)      ou R = RdRg**t et T = Tg - R**t*Td
     */
+
+    // Calcul R = Rd * Rg^T
+    Mat R = R_cam_d * R_cam_g.t();
+
+    // Calcul T = Tg - R^T * Td
+    Mat T = T_cam_g - R.t() * T_cam_d;
+
+    // Test Affichage des paramètres extrinsèques
+    cout << "===== Paramètres extrinsèques du système de stéréo =====" << endl;
+    cout << "Matrice de rotation R :" << endl
+         << R << endl
+         << endl;
+    cout << "Vecteur de translation T :" << endl
+         << T << endl;
+
+
 
     return 0;
 }

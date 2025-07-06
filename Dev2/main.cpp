@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <tuple>
 #include <opencv2/opencv.hpp>
 
 // Caméra de gauche
@@ -24,14 +25,12 @@ double zprime_cam_d = 1.0;
 
 cv::Mat findR()
 {
-    cv::Mat Rgt = R_cam_g.t();
-    return R_cam_d * Rgt;
+    return R_cam_d * R_cam_g.t();
 }
 
 cv::Mat findT(cv::Mat R)
 {
-    cv::Mat Rt = R.t();
-    return T_cam_g - Rt * T_cam_d;
+    return T_cam_g - R.t() * T_cam_d;
 }
 
 cv::Mat findRg(cv::Mat T)
@@ -55,23 +54,122 @@ cv::Mat findRg(cv::Mat T)
     return (cv::Mat_<double>(3, 3) << e11, e21, e31, e12, e22, e32, e13, e23, e33);
 }
 
-void rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::Point2d S, cv::Mat Rg, double zprime)
+std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, cv::Point2d Sg, cv::Mat Rg, double zprime, cv::Mat imageD, cv::Point2d Od, cv::Point2d Sd, cv::Mat Rd)
+{
+    std::vector<cv::Point2d> cornersG;
+
+    for (int y = 0; y < 2; y++)
+    {
+        for (int x = 0; x < 2; x++)
+        {
+            double trueX = x * (imageG.cols - 1);
+            double trueY = y * (imageG.rows - 1);
+
+            double px = (trueX - Og.x) * Sg.x;
+            double py = (trueY - Og.y) * Sg.y;
+            double pz = zprime;
+
+            cv::Mat p = (cv::Mat_<double>(3, 1) << px, py, pz); // point image
+            cv::Mat P = Rg * p;                                 // point scene
+            cv::Mat q = (pz / P.at<double>(2, 0)) * P;
+
+            int newX = q.at<double>(0, 0) / Sg.x + Og.x;
+            int newY = q.at<double>(1, 0) / Sg.y + Og.y;
+
+            cornersG.emplace_back(newX, newY);
+        }
+    }
+
+    double minXg = cornersG[0].x;
+    double maxXg = cornersG[0].x;
+    double minYg = cornersG[0].y;
+    double maxYg = cornersG[0].y;
+
+    for (const auto &pt : cornersG)
+    {
+        if (pt.x < minXg)
+            minXg = pt.x;
+        if (pt.x > maxXg)
+            maxXg = pt.x;
+        if (pt.y < minYg)
+            minYg = pt.y;
+        if (pt.y > maxYg)
+            maxYg = pt.y;
+    }
+
+    int widthG = static_cast<int>(std::round(maxXg - minXg));
+    int heightG = static_cast<int>(std::round(maxYg - minYg));
+
+    std::vector<cv::Point2d> cornersD;
+
+    for (int y = 0; y < 2; y++)
+    {
+        for (int x = 0; x < 2; x++)
+        {
+            double trueX = x * (imageD.cols - 1);
+            double trueY = y * (imageD.rows - 1);
+
+            double px = (trueX - Od.x) * Sd.x;
+            double py = (trueY - Od.y) * Sd.y;
+            double pz = zprime;
+
+            cv::Mat p = (cv::Mat_<double>(3, 1) << px, py, pz); // point image
+            cv::Mat P = Rd * p;                                 // point scene
+            cv::Mat q = (pz / P.at<double>(2, 0)) * P;
+
+            int newX = q.at<double>(0, 0) / Sd.x + Od.x;
+            int newY = q.at<double>(1, 0) / Sd.y + Od.y;
+
+            cornersD.emplace_back(newX, newY);
+        }
+    }
+
+    double minXd = cornersD[0].x;
+    double maxXd = cornersD[0].x;
+    double minYd = cornersD[0].y;
+    double maxYd = cornersD[0].y;
+
+    for (const auto &pt : cornersD)
+    {
+        if (pt.x < minXd)
+            minXd = pt.x;
+        if (pt.x > maxXd)
+            maxXd = pt.x;
+        if (pt.y < minYd)
+            minYd = pt.y;
+        if (pt.y > maxYd)
+            maxYd = pt.y;
+    }
+
+    int widthD = static_cast<int>(std::round(maxXd - minXd));
+    int heightD = static_cast<int>(std::round(maxYd - minYd));
+
+    int height = std::max(heightG, heightD);
+    int width = std::max(widthG, widthD);
+
+    double Ox = (maxXd + minXd)/2;
+    double Oy = height / 2;
+
+    return std::make_tuple(cv::Size(width, height), cv::Point2d(Ox, Oy));
+}
+
+void rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::Point2d S, cv::Mat R, double zprime)
 {
     for (int y = 0; y < image.rows; y++)
     {
         for (int x = 0; x < image.cols; x++)
         {
-            double pgx = (x - O.x) * S.x;
-            double pgy = (y - O.y) * S.y;
-            double pgz = zprime;
-            cv::Mat pg = (cv::Mat_<double>(3, 1) << pgx, pgy, pgz);
+            double px = (x - O.x) * S.x;
+            double py = (y - O.y) * S.y;
+            double pz = zprime;
+            cv::Mat p = (cv::Mat_<double>(3, 1) << px, py, pz);
 
-            cv::Mat Pg = Rg * pg;
+            cv::Mat P = R * p;
 
-            cv::Mat qg = (pgz / Pg.at<double>(2, 0)) * Pg;
+            cv::Mat q = (pz / P.at<double>(2, 0)) * P;
 
-            int newX = qg.at<double>(0, 0) / S.x + O.x;
-            int newY = qg.at<double>(1, 0) / S.y + O.y;
+            int newX = q.at<double>(0, 0) / S.x + O.x;
+            int newY = q.at<double>(1, 0) / S.y + O.y;
 
             if (newX >= 0 && newX < image.cols && newY >= 0 && newY < image.rows)
             {
@@ -81,14 +179,14 @@ void rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::Point2d 
     }
 }
 
-void invert_rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::Point2d S, cv::Mat R, double zprime)
+void invert_rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d oldO, cv::Point2d newO, cv::Point2d S, cv::Mat R, double zprime)
 {
     for (double y = 0; y < image_rectified.rows; y++)
     {
         for (double x = 0; x < image_rectified.cols; x++)
         {
-            double qx = (x - O.x) * S.x;
-            double qy = (y - O.y) * S.y;
+            double qx = (x - newO.x) * S.x;
+            double qy = (y - newO.y) * S.y;
             double qz = zprime;
             cv::Mat q = (cv::Mat_<double>(3, 1) << qx, qy, qz);
 
@@ -96,10 +194,10 @@ void invert_rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::P
 
             cv::Mat p = (qz / Q.at<double>(2, 0)) * Q;
 
-            double oldX = p.at<double>(0, 0) / S.x + O.x;   //transformation inverse vers image originale
-            double oldY = p.at<double>(1, 0) / S.y + O.y;
+            double oldX = p.at<double>(0, 0) / S.x + oldO.x; // transformation inverse vers image originale
+            double oldY = p.at<double>(1, 0) / S.y + oldO.y;
 
-            if (oldX >= -1 && oldX < image.cols + 1 && oldY >= -1 && oldY < image.rows + 1) //Interpolation bilineaire
+            if (oldX >= -1 && oldX < image.cols + 1 && oldY >= -1 && oldY < image.rows + 1) // Interpolation bilineaire
             {
                 cv::Point2d p1(std::floor(oldX), std::floor(oldY));
                 cv::Point2d p2(std::floor(oldX), std::ceil(oldY));
@@ -162,6 +260,17 @@ int main()
         Pd = R(Pg - T)      ou R = RdRg**t et T = Tg - R**t*Td
     */
 
+    /*
+
+    RgPg + Tg = RdPd + Td
+    => RgPg = RdPd + Td - Tg
+    => Pg = Rgt(RdPd + Td - Tg)
+    => Pg = Rgt(RdPd + RdRdt(Td - Tg))
+    => Pg = RgtRd(Pd + Rdt(Td-Tg))     Posons R = RgtRd et T = Rdt(Td-Tg)
+    => Pg = R(Pd + T)
+
+    */
+
     // R et T selon la preuve au dessus
     cv::Mat R = findR();
     cv::Mat T = findT(R);
@@ -182,19 +291,25 @@ int main()
         return -1;
     }
 
-    cv::Mat imageG_rectified = cv::Mat::zeros(imageG.size(), imageG.type());
-    cv::Mat imageD_rectified = cv::Mat::zeros(imageD.size(), imageD.type());
+    auto [size, newO] = getDimensions(imageG, O_cam_g, S_cam_g, R_cam_g, zprime_cam_g, imageD, O_cam_d, S_cam_d, R_cam_d);
+
+    cv::Mat imageG_rectified = cv::Mat::zeros(size, imageG.type());
+    cv::Mat imageD_rectified = cv::Mat::zeros(size, imageD.type());
+
+    std::cout << "old O :" << O_cam_g.x << " " << O_cam_g.y << " & " << O_cam_d.x << " " << O_cam_d.y << std::endl;
+    std::cout << "new O :" << newO.x << " " << newO.y << std::endl;
 
     // rectify(imageG, imageG_rectified, O_cam_g, S_cam_g, Rg_rectification, zprime_cam_g);
     // rectify(imageD, imageD_rectified, O_cam_d, S_cam_d, Rd_rectification, zprime_cam_d);
-    invert_rectify(imageG, imageG_rectified, O_cam_g, S_cam_g, Rg_rectification, zprime_cam_g);
-    invert_rectify(imageD, imageD_rectified, O_cam_d, S_cam_d, Rd_rectification, zprime_cam_d);
+    invert_rectify(imageG, imageG_rectified, O_cam_g, newO, S_cam_g, R_cam_g, zprime_cam_g);
+    invert_rectify(imageD, imageD_rectified, O_cam_d, newO, S_cam_d, R_cam_d, zprime_cam_d);
 
-    cv::flip(imageG_rectified, imageG_rectified, -1); // Weird mais ma photo est flipped sur les 2 axes
     cv::imwrite("images/RectifiedG.png", imageG_rectified);
-
-    cv::flip(imageD_rectified, imageD_rectified, -1);
     cv::imwrite("images/RectifiedD.png", imageD_rectified);
+
+    cv::Mat merge;
+    cv::hconcat(imageG_rectified, imageD_rectified, merge);
+    cv::imwrite("images/Rectified.png", merge);
 
     return 0;
 }

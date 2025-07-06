@@ -2,7 +2,7 @@ CXX = g++
 CXXFLAGS = -std=c++17 -Wall -O2 -pthread `pkg-config --cflags opencv4`
 LDFLAGS = `pkg-config --libs opencv4`
 SRC = main.cpp
-TARGET = Dev1
+TARGET = Dev2
 
 all: $(TARGET)
 

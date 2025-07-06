@@ -91,15 +91,14 @@ int main()
 
 
     // Déclaration et initialisation de l'image rectifiée gauche
-
     cv::Mat img_rect_g = cv::Mat::zeros(img_g.size(), img_g.type());
     // pour tous pixel mr,nr de Ird
     for (int mr = 0; mr < img_g.rows; ++mr) {  // pour tous les pixels (m,n) de l'image droite
        for (int nr = 0; nr < img_g.cols; ++nr) {
             // a. Trouver la position dans ℝ3 du point rectifié
             //qg= (xgr, ygr,zʹ) xgr= (mr −Omr )⋅ Sxygr= (nr −Onr)⋅ Sy
-            double xgr = (mr - O_cam_g.x) * S_cam_g.x;
-            double ygr = (nr - O_cam_g.y) * S_cam_g.y;
+            double xgr = (nr - O_cam_g.x) * S_cam_g.x;
+            double ygr = (mr - O_cam_g.y) * S_cam_g.y;
             double zgr = zprime_cam_g;
             cv::Mat qg = (cv::Mat_<double>(3, 1) << xgr, ygr, zgr);
             // b. Rotation inverse (dans ℝ3)
@@ -115,7 +114,7 @@ int main()
             double n = (pg.at<double>(1) / S_cam_g.y) + O_cam_g.y;
             //e. Interpoler (bilinéaire) la valeur Ig (m, n) à partir de ses voisins
             //f. Report de la valeur interpolée dans l'image rectifiée
-            cv::Vec3b color = bilinear_interpolate(img_g, m, n);
+            cv::Vec3b color = interpolationBilineaire(img_g, m, n);
             img_rect_g.at<cv::Vec3b>(mr, nr) = color;
 
        }
@@ -128,8 +127,8 @@ int main()
         for (int nr = 0; nr < img_d.cols; ++nr) {
             // a. Trouver la position dans ℝ3 du point rectifié
             //qd= (xdr, ydr,zʹ) xdr= (mr −Odr )⋅ Sxdr= (nr −Odr)⋅ Sy
-            double xdr = (mr - O_cam_d.x) * S_cam_d.x;
-            double ydr = (nr - O_cam_d.y) * S_cam_d.y;
+            double xdr = (nr - O_cam_d.x) * S_cam_d.x;
+            double ydr = (mr - O_cam_d.y) * S_cam_d.y;
             double zdr = zprime_cam_d;
             cv::Mat qd = (cv::Mat_<double>(3, 1) << xdr, ydr, zdr);
             // b. Rotation inverse (dans ℝ3)
@@ -145,25 +144,52 @@ int main()
             double n = (pd.at<double>(1) / S_cam_d.y) + O_cam_d.y;
             //e. Interpoler (bilinéaire) la valeur Id (m, n) à partir de ses voisins
             //f. Report de la valeur interpolée dans l'image rectifiée
-            cv::Vec3b color = bilinear_interpolate(img_d, m, n);
+            cv::Vec3b color = interpolationBilineaire(img_d, m, n);
             img_rect_d.at<cv::Vec3b>(mr, nr) = color;
 
         }
+
     }
 
-    // enregistre l'image rectifiée gauche
+  
+
+    // enregistre les images rectifiées
     cv::imwrite("images/Aloeg_rectifiee.png", img_rect_g);
-    // enregistre l'image rectifiée droite
     cv::imwrite("images/AloeD_rectifiee.png", img_rect_d);
-    //tourner les images
-    cv::Mat img_rect_g_rotated, img_rect_d_rotated;
-    cv::rotate(img_rect_g, img_rect_g_rotated, cv::ROTATE_90_CLOCKWISE);
-    cv::rotate(img_rect_d, img_rect_d_rotated, cv::ROTATE_90_CLOCKWISE);
-    // enregistre l'image rectifiée gauche tournée
-    cv::imwrite("images/Aloeg_rectifiee_rotated.png", img_rect_g_rotated);
-    // enregistre l'image rectifiée droite tournée
-    cv::imwrite("images/AloeD_rectifiee_rotated.png", img_rect_d_rotated);
-    
+
+// ajouter une ligne si les images n'ont pas la même hauteur , j'avais ça avec les plantes
+int Hg = img_rect_g.rows, Hd = img_rect_d.rows;
+if (Hg < Hd) {
+    cv::copyMakeBorder(img_rect_g, img_rect_g,
+                       0, Hd - Hg,  
+                       0, 0,        
+                       cv::BORDER_CONSTANT,
+                       cv::Scalar(0,0,0)); 
+}
+else if (Hd < Hg) {
+    cv::copyMakeBorder(img_rect_d, img_rect_d,
+                       0, Hg - Hd,
+                       0, 0,
+                       cv::BORDER_CONSTANT,
+                       cv::Scalar(0,0,0));
+}
+
+// mettre les deux images ensemble
+cv::Mat verif;
+cv::hconcat(img_rect_g, img_rect_d, verif);
+
+// tracer une ligne tous les 25 lignes
+int step = 15;
+for(int y = 0; y < verif.rows; y += step) {
+    cv::line(verif, 
+             cv::Point(0, y), 
+             cv::Point(verif.cols, y), 
+             cv::Scalar(0,0,255),
+             1, cv::LINE_AA);
+}
+
+
+cv::imwrite("images/verification.png", verif);
 
 
     return 0;

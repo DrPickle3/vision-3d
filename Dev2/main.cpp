@@ -1,38 +1,60 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
-// Interpolation bilinéaire 
-cv::Vec3b interpolationBilineaire(const cv::Mat &img, double x, double y)
+// Interpolation bilinéaire pour images couleur
+cv::Vec3b interpolationBilineaire(const cv::Mat &image, double oldX, double oldY)
 {
-    // 1) clamp des coordonnées pour rester dans l’image
-    x = std::min(std::max(x, 0.0), static_cast<double>(img.cols - 1));
-    y = std::min(std::max(y, 0.0), static_cast<double>(img.rows - 1));
-
-    // 4 pixels entiers autour de x,y
-    int x1 = static_cast<int>(std::floor(x));
-    int y1 = static_cast<int>(std::floor(y));
-    int x2 = std::min(x1 + 1, img.cols - 1);
-    int y2 = std::min(y1 + 1, img.rows - 1);
-
-    double dx = x - x1;
-    double dy = y - y1;
-
-    cv::Vec3b Q11 = img.at<cv::Vec3b>(y1, x1);
-    cv::Vec3b Q21 = img.at<cv::Vec3b>(y1, x2);
-    cv::Vec3b Q12 = img.at<cv::Vec3b>(y2, x1);
-    cv::Vec3b Q22 = img.at<cv::Vec3b>(y2, x2);
-
-    //interpolation bilinéaire
-    cv::Vec3b resultat;
-    for (int c = 0; c < 3; ++c)
+    if (oldX < -1 || oldX > image.cols || 
+        oldY < -1 || oldY > image.rows)
     {
-        double val = (1 - dx)*(1 - dy)*Q11[c]
-                   + dx*(1 - dy)*Q21[c]
-                   + (1 - dx)*dy*Q12[c]
-                   + dx*dy*Q22[c];
-        resultat[c] = val;
+        // on est trop en dehors : on renvoie noir
+        return cv::Vec3b(0, 0, 0);
     }
-    return resultat;
+
+    // coins entiers autour de (oldX, oldY)
+    int x1 = static_cast<int>(std::floor(oldX));
+    int y1 = static_cast<int>(std::floor(oldY));
+    int x2 = static_cast<int>(std::ceil(oldX));
+    int y2 = static_cast<int>(std::ceil(oldY));
+
+    double dx = oldX - x1;
+    double dy = oldY - y1;
+
+    cv::Vec3d acc(0,0,0);
+    double sumW = 0.0;
+
+    // Q11 : coin supérieur gauche
+    if (x1 >= 0 && y1 >= 0) {
+        double w = (1 - dx) * (1 - dy);
+        acc += w * cv::Vec3d(image.at<cv::Vec3b>(y1, x1));
+        sumW += w;
+    }
+    // Q21 : coin supérieur droit
+    if (x2 < image.cols && y1 >= 0) {
+        double w = dx * (1 - dy);
+        acc += w * cv::Vec3d(image.at<cv::Vec3b>(y1, x2));
+        sumW += w;
+    }
+    // Q12 : coin inférieur gauche
+    if (x1 >= 0 && y2 < image.rows) {
+        double w = (1 - dx) * dy;
+        acc += w * cv::Vec3d(image.at<cv::Vec3b>(y2, x1));
+        sumW += w;
+    }
+    // Q22 : coin inférieur droit
+    if (x2 < image.cols && y2 < image.rows) {
+        double w = dx * dy;
+        acc += w * cv::Vec3d(image.at<cv::Vec3b>(y2, x2));
+        sumW += w;
+    }
+
+    acc *= (1.0 / sumW);
+    // on renvoie le pixel interpolé
+    return cv::Vec3b(
+        std::round(acc[0]),
+        std::round(acc[1]),
+        std::round(acc[2])
+    );
 }
 
 

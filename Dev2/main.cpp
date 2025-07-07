@@ -76,8 +76,6 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
             int newX = q.at<double>(0, 0) / Sg.x + Og.x;
             int newY = q.at<double>(1, 0) / Sg.y + Og.y;
 
-            std::cout << "new X: " << newX << " new Y: " << newY << std::endl;
-
             cornersG.emplace_back(newX, newY);
         }
     }
@@ -121,7 +119,6 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
 
             int newX = q.at<double>(0, 0) / Sd.x + Od.x;
             int newY = q.at<double>(1, 0) / Sd.y + Od.y;
-            std::cout << "new X: " << newX << " new Y: " << newY << std::endl;
 
             cornersD.emplace_back(newX, newY);
         }
@@ -152,8 +149,6 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
 
     double maxX = std::max(maxXg, maxXd);
     double minX = std::min(minXg, minXd);
-
-    std::cout << maxX << minX << std::endl;
 
     double Ox = (maxX - minX)/2;
     double Oy = height / 2;
@@ -303,9 +298,6 @@ int main()
 
     cv::Mat imageG_rectified = cv::Mat::zeros(size, imageG.type());
     cv::Mat imageD_rectified = cv::Mat::zeros(size, imageD.type());
-
-    std::cout << "old O :" << O_cam_g.x << " " << O_cam_g.y << " & " << O_cam_d.x << " " << O_cam_d.y << std::endl;
-    std::cout << "new O :" << newO.x << " " << newO.y << std::endl;
 
     // rectify(imageG, imageG_rectified, O_cam_g, S_cam_g, Rg_rectification, zprime_cam_g);
     // rectify(imageD, imageD_rectified, O_cam_d, S_cam_d, Rd_rectification, zprime_cam_d);

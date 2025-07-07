@@ -25,12 +25,12 @@ double zprime_cam_d = 1.0;
 
 cv::Mat findR()
 {
-    return R_cam_d * R_cam_g.t();
+    return R_cam_g.t() * R_cam_d;
 }
 
 cv::Mat findT(cv::Mat R)
 {
-    return T_cam_g - R.t() * T_cam_d;
+    return R_cam_d.t() * (T_cam_d - T_cam_g);
 }
 
 cv::Mat findRg(cv::Mat T)
@@ -51,7 +51,7 @@ cv::Mat findRg(cv::Mat T)
     double e31 = e12 * e23 - e22 * e13;
     double e32 = -(e11 * e23 - e21 * e13);
     double e33 = e11 * e22 - e21 * e12;
-    return (cv::Mat_<double>(3, 3) << e11, e21, e31, e12, e22, e32, e13, e23, e33);
+    return (cv::Mat_<double>(3, 3) << e11, e12, e13, e21, e22, e23, e31, e32, e33);
 }
 
 std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, cv::Point2d Sg, cv::Mat Rg, double zprime, cv::Mat imageD, cv::Point2d Od, cv::Point2d Sd, cv::Mat Rd)
@@ -62,11 +62,11 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
     {
         for (int x = 0; x < 2; x++)
         {
-            double trueX = x * (imageG.cols - 1);
-            double trueY = y * (imageG.rows - 1);
+            double m = x * (imageG.cols - 1);   //Coins de l'image originale gauche
+            double n = y * (imageG.rows - 1);
 
-            double px = (trueX - Og.x) * Sg.x;
-            double py = (trueY - Og.y) * Sg.y;
+            double px = (m - Og.x) * Sg.x;
+            double py = (n - Og.y) * Sg.y;
             double pz = zprime;
 
             cv::Mat p = (cv::Mat_<double>(3, 1) << px, py, pz); // point image
@@ -75,6 +75,8 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
 
             int newX = q.at<double>(0, 0) / Sg.x + Og.x;
             int newY = q.at<double>(1, 0) / Sg.y + Og.y;
+
+            std::cout << "new X: " << newX << " new Y: " << newY << std::endl;
 
             cornersG.emplace_back(newX, newY);
         }
@@ -106,11 +108,11 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
     {
         for (int x = 0; x < 2; x++)
         {
-            double trueX = x * (imageD.cols - 1);
-            double trueY = y * (imageD.rows - 1);
+            double m = x * (imageD.cols - 1);
+            double n = y * (imageD.rows - 1);
 
-            double px = (trueX - Od.x) * Sd.x;
-            double py = (trueY - Od.y) * Sd.y;
+            double px = (m - Od.x) * Sd.x;
+            double py = (n - Od.y) * Sd.y;
             double pz = zprime;
 
             cv::Mat p = (cv::Mat_<double>(3, 1) << px, py, pz); // point image
@@ -119,6 +121,7 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
 
             int newX = q.at<double>(0, 0) / Sd.x + Od.x;
             int newY = q.at<double>(1, 0) / Sd.y + Od.y;
+            std::cout << "new X: " << newX << " new Y: " << newY << std::endl;
 
             cornersD.emplace_back(newX, newY);
         }
@@ -147,7 +150,12 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
     int height = std::max(heightG, heightD);
     int width = std::max(widthG, widthD);
 
-    double Ox = (maxXd + minXd)/2;
+    double maxX = std::max(maxXg, maxXd);
+    double minX = std::min(minXg, minXd);
+
+    std::cout << maxX << minX << std::endl;
+
+    double Ox = (maxX - minX)/2;
     double Oy = height / 2;
 
     return std::make_tuple(cv::Size(width, height), cv::Point2d(Ox, Oy));
@@ -291,7 +299,7 @@ int main()
         return -1;
     }
 
-    auto [size, newO] = getDimensions(imageG, O_cam_g, S_cam_g, R_cam_g, zprime_cam_g, imageD, O_cam_d, S_cam_d, R_cam_d);
+    auto [size, newO] = getDimensions(imageG, O_cam_g, S_cam_g, Rg_rectification, zprime_cam_g, imageD, O_cam_d, S_cam_d, Rd_rectification);
 
     cv::Mat imageG_rectified = cv::Mat::zeros(size, imageG.type());
     cv::Mat imageD_rectified = cv::Mat::zeros(size, imageD.type());

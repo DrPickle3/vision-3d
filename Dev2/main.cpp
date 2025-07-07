@@ -23,16 +23,6 @@ cv::Point2d O_cam_d(765.134, 510.599);
 cv::Point2d S_cam_d(0.00155227, 0.00155227);
 double zprime_cam_d = 1.0;
 
-cv::Mat findR()
-{
-    return R_cam_g.t() * R_cam_d;
-}
-
-cv::Mat findT(cv::Mat R)
-{
-    return R_cam_d.t() * (T_cam_d - T_cam_g);
-}
-
 cv::Mat findRg(cv::Mat T)
 {
     // e1 = T/|T|
@@ -54,7 +44,7 @@ cv::Mat findRg(cv::Mat T)
     return (cv::Mat_<double>(3, 3) << e11, e12, e13, e21, e22, e23, e31, e32, e33);
 }
 
-std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, cv::Point2d Sg, cv::Mat Rg, double zprime, cv::Mat imageD, cv::Point2d Od, cv::Point2d Sd, cv::Mat Rd)
+std::tuple<cv::Size, cv::Point2d> getParameters(cv::Mat imageG, cv::Point2d Og, cv::Point2d Sg, cv::Mat Rg, double zprimeG, cv::Mat imageD, cv::Point2d Od, cv::Point2d Sd, cv::Mat Rd, double zprimeD)
 {
     std::vector<cv::Point2d> cornersG;
 
@@ -62,12 +52,12 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
     {
         for (int x = 0; x < 2; x++)
         {
-            double m = x * (imageG.cols - 1);   //Coins de l'image originale gauche
+            double m = x * (imageG.cols - 1); // Coins de l'image originale gauche
             double n = y * (imageG.rows - 1);
 
             double px = (m - Og.x) * Sg.x;
             double py = (n - Og.y) * Sg.y;
-            double pz = zprime;
+            double pz = zprimeG;
 
             cv::Mat p = (cv::Mat_<double>(3, 1) << px, py, pz); // point image
             cv::Mat P = Rg * p;                                 // point scene
@@ -76,7 +66,7 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
             int newX = q.at<double>(0, 0) / Sg.x + Og.x;
             int newY = q.at<double>(1, 0) / Sg.y + Og.y;
 
-            cornersG.emplace_back(newX, newY);
+            cornersG.emplace_back(newX, newY); // On conserve les 4 coins projetes
         }
     }
 
@@ -85,7 +75,7 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
     double minYg = cornersG[0].y;
     double maxYg = cornersG[0].y;
 
-    for (const auto &pt : cornersG)
+    for (const auto &pt : cornersG) // On prends les min et les max des axes
     {
         if (pt.x < minXg)
             minXg = pt.x;
@@ -97,21 +87,21 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
             maxYg = pt.y;
     }
 
-    int widthG = static_cast<int>(std::round(maxXg - minXg));
+    int widthG = static_cast<int>(std::round(maxXg - minXg)); // Width et height du canvas pour que l'image projetee fit parfaitement
     int heightG = static_cast<int>(std::round(maxYg - minYg));
 
     std::vector<cv::Point2d> cornersD;
 
-    for (int y = 0; y < 2; y++)
+    for (int y = 0; y < 2; y++) // Meme chose pour l'image de droite
     {
         for (int x = 0; x < 2; x++)
         {
-            double m = x * (imageD.cols - 1);
+            double m = x * (imageD.cols - 1); // Coins de l'image originale
             double n = y * (imageD.rows - 1);
 
             double px = (m - Od.x) * Sd.x;
             double py = (n - Od.y) * Sd.y;
-            double pz = zprime;
+            double pz = zprimeD;
 
             cv::Mat p = (cv::Mat_<double>(3, 1) << px, py, pz); // point image
             cv::Mat P = Rd * p;                                 // point scene
@@ -144,21 +134,21 @@ std::tuple<cv::Size, cv::Point2d> getDimensions(cv::Mat imageG, cv::Point2d Og, 
     int widthD = static_cast<int>(std::round(maxXd - minXd));
     int heightD = static_cast<int>(std::round(maxYd - minYd));
 
-    int height = std::max(heightG, heightD);
+    int height = std::max(heightG, heightD); // height et width commune (on veut le meme nombre de rangee pour faire la correspondance)
     int width = std::max(widthG, widthD);
 
-    double maxX = std::max(maxXg, maxXd);
+    double maxX = std::max(maxXg, maxXd); // On prend le min et max de l'image jumelee
     double minX = std::min(minXg, minXd);
 
-    double Ox = (maxX - minX)/2;
+    double Ox = (maxX - minX) / 2; // Le nouveau O est au centre de cette image jumelee
     double Oy = height / 2;
 
-    return std::make_tuple(cv::Size(width, height), cv::Point2d(Ox, Oy));
+    return std::make_tuple(cv::Size(width, height), cv::Point2d(Ox, Oy)); // On retourne les parametres de la camera rectifiee
 }
 
 void rectify(cv::Mat image, cv::Mat image_rectified, cv::Point2d O, cv::Point2d S, cv::Mat R, double zprime)
 {
-    for (int y = 0; y < image.rows; y++)
+    for (int y = 0; y < image.rows; y++) // Rectification avec lignes noires (mauvais)
     {
         for (int x = 0; x < image.cols; x++)
         {
@@ -247,44 +237,24 @@ int main()
 {
     /*
     R et T theorique
+        RgPg + Tg = RdPd + Td
 
-    Nous voulons Pd = R(Pg - T)
-    Nous avons Pg = RgPs + Tg et Pd = RdPs + Td
-
-    Isolons Ps de g:
-        Ps = Rg**-1 * Pg - Tg           (Rg**-1 = Rg**t)
-    Remplacons dans la 2e equation:
-        Pd = RdRg**t (Pg - Tg) + Td
-    Posons R = RdRg**t:
-        Pd = R(Pg - Tg) + Td
-     => Pd = R(Pg - Tg) + RR**-1 * Td
-     => Pd = R(Pg - Tg + R**t * Td)
-    Posons T = Tg - R**t*Td:
-        Pd = R(Pg - T)      ou R = RdRg**t et T = Tg - R**t*Td
-    */
-
-    /*
-
-    RgPg + Tg = RdPd + Td
-    => RgPg = RdPd + Td - Tg
-    => Pg = Rgt(RdPd + Td - Tg)
-    => Pg = Rgt(RdPd + RdRdt(Td - Tg))
-    => Pg = RgtRd(Pd + Rdt(Td-Tg))     Posons R = RgtRd et T = Rdt(Td-Tg)
-    => Pg = R(Pd + T)
-
+    Isolons Pg:
+        => RgPg = RdPd + Td - Tg
+        => RgtRgPg = Rgt(RdPd + Td - Tg)         (Rg**-1 = Rgt)
+        => Pg = Rgt(RdPd + RdRdt(Td - Tg))
+        => Pg = RgtRd(Pd + Rdt(Td-Tg))     Posons R = RgtRd et T = Rdt(Td-Tg)
+        => Pg = R(Pd + T)
     */
 
     // R et T selon la preuve au dessus
-    cv::Mat R = findR();
-    cv::Mat T = findT(R);
+    cv::Mat R = R_cam_g.t() * R_cam_d;
+    cv::Mat T = R_cam_d.t() * (T_cam_d - T_cam_g);
 
     // Etape 1 de la rectification
     cv::Mat Rg_rectification = findRg(T);
-
-    // Etape 2
     cv::Mat Rd_rectification = R.t() * Rg_rectification;
 
-    // Etape 3 (pour chaque pixel de l'image de gauche)
     cv::Mat imageG = cv::imread("images/AloeG.png");
     cv::Mat imageD = cv::imread("images/AloeD.png");
 
@@ -294,22 +264,30 @@ int main()
         return -1;
     }
 
-    auto [size, newO] = getDimensions(imageG, O_cam_g, S_cam_g, Rg_rectification, zprime_cam_g, imageD, O_cam_d, S_cam_d, Rd_rectification);
+    cv::Mat imageG_blackLined = cv::Mat::zeros(imageG.size(), imageG.type());
+    cv::Mat imageD_blackLined = cv::Mat::zeros(imageD.size(), imageD.type());
 
-    cv::Mat imageG_rectified = cv::Mat::zeros(size, imageG.type());
+    rectify(imageG, imageG_blackLined, O_cam_g, S_cam_g, Rg_rectification, zprime_cam_g);
+    rectify(imageD, imageD_blackLined, O_cam_d, S_cam_d, Rd_rectification, zprime_cam_d);
+
+    cv::imwrite("images/RectifiedG.png", imageG_blackLined);
+    cv::imwrite("images/RectifiedD.png", imageD_blackLined);
+
+    // Etape 2 de la grille (Trouver les parametres de la camera rectifiee)
+    auto [size, newO] = getParameters(imageG, O_cam_g, S_cam_g, Rg_rectification, zprime_cam_g, imageD, O_cam_d, S_cam_d, Rd_rectification, zprime_cam_d);
+
+    cv::Mat imageG_rectified = cv::Mat::zeros(size, imageG.type()); // Images vides de la bonne taille
     cv::Mat imageD_rectified = cv::Mat::zeros(size, imageD.type());
 
-    // rectify(imageG, imageG_rectified, O_cam_g, S_cam_g, Rg_rectification, zprime_cam_g);
-    // rectify(imageD, imageD_rectified, O_cam_d, S_cam_d, Rd_rectification, zprime_cam_d);
-    invert_rectify(imageG, imageG_rectified, O_cam_g, newO, S_cam_g, R_cam_g, zprime_cam_g);
+    invert_rectify(imageG, imageG_rectified, O_cam_g, newO, S_cam_g, R_cam_g, zprime_cam_g); // Rectification inverse
     invert_rectify(imageD, imageD_rectified, O_cam_d, newO, S_cam_d, R_cam_d, zprime_cam_d);
 
-    cv::imwrite("images/RectifiedG.png", imageG_rectified);
-    cv::imwrite("images/RectifiedD.png", imageD_rectified);
+    cv::imwrite("images/InvertRectifiedG.png", imageG_rectified);
+    cv::imwrite("images/InvertRectifiedD.png", imageD_rectified);
 
     cv::Mat merge;
     cv::hconcat(imageG_rectified, imageD_rectified, merge);
-    cv::imwrite("images/Rectified.png", merge);
+    cv::imwrite("images/Rectified.png", merge); // On met les images cotes a cotes pour mieux les verifier sur Gimp
 
     return 0;
 }

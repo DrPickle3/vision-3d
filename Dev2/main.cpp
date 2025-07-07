@@ -3,23 +3,47 @@
 #include <tuple>
 #include <opencv2/opencv.hpp>
 
-// Caméra de gauche
-cv::Mat R_cam_g = (cv::Mat_<double>(3, 3) << 0.9962, 0, -0.0872,
-                   0, 0.9962, 0,
-                   0.0872, 0, 0.9962);
+// ALOE
+//  // Caméra de gauche
+//  cv::Mat R_cam_g = (cv::Mat_<double>(3, 3) << 0.9962, 0, -0.0872,
+//                     0, 0.9962, 0,
+//                     0.0872, 0, 0.9962);
 
-cv::Mat T_cam_g = (cv::Mat_<double>(3, 1) << 0, 0, 0);
-cv::Point2d O_cam_g(538.625, 510.471);
+// cv::Mat T_cam_g = (cv::Mat_<double>(3, 1) << 0, 0, 0);
+// cv::Point2d O_cam_g(538.625, 510.471);
+// cv::Point2d S_cam_g(0.00155227, 0.00155227);
+// double zprime_cam_g = 1.0;
+
+// // Caméra de droite
+// cv::Mat R_cam_d = (cv::Mat_<double>(3, 3) << 0.9962, 0, 0.0872,
+//                    0, 0.9962, 0,
+//                    -0.0872, 0, 0.9962);
+
+// cv::Mat T_cam_d = (cv::Mat_<double>(3, 1) << 5, 0, 0);
+// cv::Point2d O_cam_d(765.134, 510.599);
+// cv::Point2d S_cam_d(0.00155227, 0.00155227);
+// double zprime_cam_d = 1.0;
+
+// BEBE
+// Camera Gauche
+cv::Mat R_cam_g = (cv::Mat_<double>(3, 3) << 0.9962, -0.0015, -0.0871,
+                   0.0, 0.996, -0.0174,
+                   0.0872, 0.0174, 0.996);
+
+cv::Mat T_cam_g = (cv::Mat_<double>(3, 1) << 3.0, 5.0, 7.0);
+
+cv::Point2d O_cam_g(512.843, 493.819);
 cv::Point2d S_cam_g(0.00155227, 0.00155227);
 double zprime_cam_g = 1.0;
 
-// Caméra de droite
-cv::Mat R_cam_d = (cv::Mat_<double>(3, 3) << 0.9962, 0, 0.0872,
-                   0, 0.9962, 0,
-                   -0.0872, 0, 0.9962);
+// Camera droite
+cv::Mat R_cam_d = (cv::Mat_<double>(3, 3) << 0.9962, -0.0015, 0.0871,
+                   0.0, 0.996, 0.0174,
+                   -0.0872, -0.0174, 0.996);
 
-cv::Mat T_cam_d = (cv::Mat_<double>(3, 1) << 5, 0, 0);
-cv::Point2d O_cam_d(765.134, 510.599);
+cv::Mat T_cam_d = (cv::Mat_<double>(3, 1) << 5.6, 5.0, 7.0);
+
+cv::Point2d O_cam_d(726.753, 530.523);
 cv::Point2d S_cam_d(0.00155227, 0.00155227);
 double zprime_cam_d = 1.0;
 
@@ -255,8 +279,11 @@ int main()
     cv::Mat Rg_rectification = findRg(T);
     cv::Mat Rd_rectification = R.t() * Rg_rectification;
 
-    cv::Mat imageG = cv::imread("images/AloeG.png");
-    cv::Mat imageD = cv::imread("images/AloeD.png");
+    // cv::Mat imageG = cv::imread("images/AloeG.png");
+    // cv::Mat imageD = cv::imread("images/AloeD.png");
+
+    cv::Mat imageG = cv::imread("images/babyG.ppm");
+    cv::Mat imageD = cv::imread("images/babyD.ppm");
 
     if (imageG.empty() || imageD.empty())
     {

@@ -16,8 +16,8 @@ cv::Mat getDisparityMap(const cv::Mat &image1, const cv::Mat &image2)
     {
         for (int x = 0; x < image1.cols; ++x)
         {
-            int bestDisparity = 0;
-            float bestSum = -FLT_MAX;
+            int bestDisparityLeft = 0;
+            float bestSumLeft = -FLT_MAX;
 
             for (int d = MIN_DISPARITY; d <= MAX_DISPARITY; ++d) // CONTRAINTE LIMITE DE DISPARITE
             {
@@ -45,13 +45,53 @@ cv::Mat getDisparityMap(const cv::Mat &image1, const cv::Mat &image2)
                 }
 
                 // CONTRAINTE DE SIMILARITE
-                if (sum > bestSum)
+                if (sum > bestSumLeft)
                 {
-                    bestDisparity = d;
-                    bestSum = sum;
+                    bestDisparityLeft = d;
+                    bestSumLeft = sum;
                 }
             }
-            disparityMap.at<uchar>(y, x) = static_cast<uchar>(bestDisparity);
+
+            int bestDisparityRight = 0;
+            float bestSumRight = -FLT_MAX;
+
+            for (int d = MIN_DISPARITY; d <= MAX_DISPARITY; ++d) // CONTRAINTE LIMITE DE DISPARITE
+            {
+                if (x - d < 0)
+                    continue;
+
+                float sum = 0;
+
+                for (int k = -WINDOW_SIZE; k <= WINDOW_SIZE; ++k)
+                {
+                    for (int j = -WINDOW_SIZE; j <= WINDOW_SIZE; ++j)
+                    {
+                        if (y + j < 0 || y + j >= image2.rows)
+                            continue;
+                        if (x + k < 0 || x + k >= image2.cols)
+                            continue;
+                        if (x + k - d < 0 || x + k - d >= image1.cols)
+                            continue;
+
+                        int pixelGNeighbor = image1.at<uchar>(y + j, x + k - d);
+                        int pixelDNeighbor = image2.at<uchar>(y + j, x + k);
+
+                        sum += -1.0f * (pixelDNeighbor - pixelGNeighbor) * (pixelDNeighbor - pixelGNeighbor);
+                    }
+                }
+
+                // CONTRAINTE DE SIMILARITE
+                if (sum > bestSumRight)
+                {
+                    bestDisparityRight = d;
+                    bestSumRight = sum;
+                }
+            }
+            if (abs(bestDisparityLeft - bestDisparityRight) <= SYMMETRIC_TOLERANCE)
+            {
+                // CONTRAINTE DE SYMMETRIE
+                disparityMap.at<uchar>(y, x) = static_cast<uchar>(bestDisparityLeft);
+            }
         }
     }
     return disparityMap;
@@ -69,33 +109,34 @@ int main()
         return -1;
     }
 
-    cv::Mat disparityG = getDisparityMap(imageG, imageD);
-    cv::Mat disparityD = getDisparityMap(imageD, imageG);
+    cv::Mat disparity = getDisparityMap(imageG, imageD);
 
-    cv::Mat disparitySymmetric(disparityG.rows, disparityG.cols, CV_8U, cv::Scalar(0));
+    // cv::Mat disparityD = getDisparityMap(imageD, imageG);
 
-    // CONTRAINTE DE SYMMETRIE
-    for (int y = 0; y < disparitySymmetric.rows; y++)
-    {
-        for (int x = 0; x < disparitySymmetric.cols; x++)
-        {
-            int d = disparityG.at<uchar>(y, x);
-            int xr = x - d;
+    // cv::Mat disparitySymmetric(disparityG.rows, disparityG.cols, CV_8U, cv::Scalar(0));
 
-            if (xr >= 0 && xr < imageD.cols)
-            {
-                int dR = disparityD.at<uchar>(y, xr);
-                if (abs(d - dR) <= SYMMETRIC_TOLERANCE)
-                {
-                    disparitySymmetric.at<uchar>(y, x) = d;
-                }
-            }
-        }
-    }
+    // // CONTRAINTE DE SYMMETRIE
+    // for (int y = 0; y < disparitySymmetric.rows; y++)
+    // {
+    //     for (int x = 0; x < disparitySymmetric.cols; x++)
+    //     {
+    //         int d = disparityG.at<uchar>(y, x);
+    //         int xr = x - d;
 
-    normalize(disparitySymmetric, disparitySymmetric, 0, 255, cv::NORM_MINMAX);
+    //         if (xr >= 0 && xr < imageD.cols)
+    //         {
+    //             int dR = disparityD.at<uchar>(y, xr);
+    //             if (abs(d - dR) <= SYMMETRIC_TOLERANCE)
+    //             {
+    //                 disparitySymmetric.at<uchar>(y, x) = d;
+    //             }
+    //         }
+    //     }
+    // }
 
-    cv::imwrite("images/disparityMap.png", disparitySymmetric);
+    normalize(disparity, disparity, 0, 255, cv::NORM_MINMAX);
+
+    cv::imwrite("images/disparityMap.png", disparity);
 
     return 0;
 }

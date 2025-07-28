@@ -87,9 +87,10 @@ cv::Mat getDisparityMap(const cv::Mat &image1, const cv::Mat &image2)
                     bestSumRight = sum;
                 }
             }
+            
+            // CONTRAINTE DE SYMMETRIE
             if (abs(bestDisparityLeft - bestDisparityRight) <= SYMMETRIC_TOLERANCE)
             {
-                // CONTRAINTE DE SYMMETRIE
                 disparityMap.at<uchar>(y, x) = static_cast<uchar>(bestDisparityLeft);
             }
         }

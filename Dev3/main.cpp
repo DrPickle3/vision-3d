@@ -14,7 +14,7 @@ int MAX_DISPARITY = 75;
 
 // MC par correlation
 int WINDOW_SIZE = 5;
-int SYMMETRIC_TOLERANCE = 10;
+int SYMMETRIC_TOLERANCE = 1;
 int CONTINUOUS_DISPARITY_TOLERANCE = 20;
 
 cv::Mat getDisparityMap(const cv::Mat &left, const cv::Mat &right)

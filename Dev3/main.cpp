@@ -1,122 +1,113 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <opencv2/viz.hpp>
+#include <vector>
+#include <string>
+#include <limits>
+#include <fstream>
 
 using namespace std;
 
-int MIN_DISPARITY = 12;
-int MAX_DISPARITY = 55;
+// CONTRAINTE DE LIMITE DE DISPARITE
+int MIN_DISPARITY = 5;
+int MAX_DISPARITY = 75;
+
+// MC par correlation
 int WINDOW_SIZE = 5;
-int SYMMETRIC_TOLERANCE = 45;
+int SYMMETRIC_TOLERANCE = 10;
+int CONTINUOUS_DISPARITY_TOLERANCE = 20;
 
-cv::Mat getRightViewDisparityMap(const cv::Mat &leftImage, const cv::Mat &rightImage)
+cv::Mat getDisparityMap(const cv::Mat &left, const cv::Mat &right)
 {
-    cv::Mat disparityMap(rightImage.rows, rightImage.cols, CV_8U, cv::Scalar(0));
+    cv::Mat disparityMap = cv::Mat::zeros(right.rows, right.cols, CV_8U);
 
-    for (int y = 0; y < rightImage.rows; ++y)
+    for (int y = WINDOW_SIZE; y < right.rows - WINDOW_SIZE; ++y)
     {
-        int previousBestDisparity = 0;
-        int previousX = -1;
+        int previousDisparity = -1;
 
-        for (int x = 0; x < rightImage.cols; ++x)
+        for (int x = WINDOW_SIZE; x < right.cols - WINDOW_SIZE; ++x)
         {
-            int bestDisparityRight = 0;
-            float bestSumRight = -FLT_MAX;
+            int rightBestDisparity = 0;
+            float minRightErr = FLT_MAX;
 
-            // Step 1: Compute disparity from right to left
+            // CONTRAINTE DE LIMITE DE DISPARITE
             for (int d = MIN_DISPARITY; d <= MAX_DISPARITY; ++d)
             {
-                if (x + d >= leftImage.cols)
+                if (x + d >= left.cols - WINDOW_SIZE)
                     continue;
 
-                float sum = 0.0f;
+                float err = 0;
 
-                for (int dy = -WINDOW_SIZE; dy <= WINDOW_SIZE; ++dy)
+                // CONTRAINTE DE SIMILARITE
+                for (int j = -WINDOW_SIZE; j <= WINDOW_SIZE; ++j)
                 {
-                    for (int dx = -WINDOW_SIZE; dx <= WINDOW_SIZE; ++dx)
+                    for (int k = -WINDOW_SIZE; k <= WINDOW_SIZE; ++k)
                     {
-                        int yy = y + dy;
-                        int xx = x + dx;
-                        int xxShifted = x + dx + d;
+                        int rightPixel = right.at<uchar>(y + j, x + k);
+                        int leftPixel = left.at<uchar>(y + j, x + k + d);
 
-                        if (yy < 0 || yy >= rightImage.rows || xx < 0 || xx >= rightImage.cols)
-                            continue;
-                        if (xxShifted < 0 || xxShifted >= leftImage.cols)
-                            continue;
-
-                        int pixelRight = rightImage.at<uchar>(yy, xx);
-                        int pixelLeft = leftImage.at<uchar>(yy, xxShifted);
-
-                        float diff = pixelRight - pixelLeft;
-                        sum += -1.0f * diff * diff;
+                        float diff = rightPixel - leftPixel;
+                        err += diff * diff; // Somme des différences au carré
                     }
                 }
 
-                if (sum > bestSumRight)
+                // CONTRAINTE DE CONTINUITÉ
+                if (previousDisparity != -1)
                 {
-                    bestDisparityRight = d;
-                    bestSumRight = sum;
-                }
-            }
-
-            // Step 2: Compute matching disparity from left to right (symmetry check)
-            int matchXInLeft = x + bestDisparityRight;
-            int bestDisparityLeft = 0;
-            float bestSumLeft = -FLT_MAX;
-
-            if (matchXInLeft < leftImage.cols)
-            {
-                for (int d = MIN_DISPARITY; d <= MAX_DISPARITY; ++d)
-                {
-                    if (matchXInLeft - d < 0)
-                        continue;
-
-                    float sum = 0.0f;
-
-                    for (int dy = -WINDOW_SIZE; dy <= WINDOW_SIZE; ++dy)
+                    int discontinuity = abs(d - previousDisparity);
+                    if (discontinuity > CONTINUOUS_DISPARITY_TOLERANCE)
                     {
-                        for (int dx = -WINDOW_SIZE; dx <= WINDOW_SIZE; ++dx)
-                        {
-                            int yy = y + dy;
-                            int xxL = matchXInLeft + dx;
-                            int xxR = matchXInLeft + dx - d;
-
-                            if (yy < 0 || yy >= leftImage.rows || xxL < 0 || xxL >= leftImage.cols || xxR < 0 || xxR >= rightImage.cols)
-                                continue;
-
-                            int pixelLeft = leftImage.at<uchar>(yy, xxL);
-                            int pixelRight = rightImage.at<uchar>(yy, xxR);
-
-                            float diff = pixelLeft - pixelRight;
-                            sum += -1.0f * diff * diff;
-                        }
-                    }
-
-                    if (sum > bestSumLeft)
-                    {
-                        bestDisparityLeft = d;
-                        bestSumLeft = sum;
+                        err += discontinuity * 100;
                     }
                 }
-            }
 
-            // Step 3: Order constraint
-            bool orderOK = true;
-            if (previousX != -1 && x > previousX)
-            {
-                int mappedPrev = previousX + previousBestDisparity;
-                int mappedCurr = x + bestDisparityRight;
-
-                if (mappedCurr <= mappedPrev) {
-                    // orderOK = false;
+                if (err < minRightErr) // On minimise l'erreur
+                {
+                    minRightErr = err;
+                    rightBestDisparity = d;
                 }
             }
 
-            // Step 4: Symmetry check and final assignment
-            if (orderOK && std::abs(bestDisparityRight - bestDisparityLeft) <= SYMMETRIC_TOLERANCE)
+            // Pour la symétrie, on part du pixel trouvé avec la disparité droite et
+            // on cherche la disparité gauche correspondante
+            int leftX = x + rightBestDisparity; // Position correspondante dans l'image gauche (du point correspondant trouvé)
+
+            if (leftX >= left.cols - WINDOW_SIZE)
+                continue;
+
+            int leftBestDisparity = 0;
+            float leftMinErr = FLT_MAX;
+
+            for (int d = MIN_DISPARITY; d <= MAX_DISPARITY; ++d)
             {
-                disparityMap.at<uchar>(y, x) = static_cast<uchar>(bestDisparityRight);
-                previousBestDisparity = bestDisparityRight;
-                previousX = x;
+                if (leftX - d < WINDOW_SIZE)
+                    continue;
+
+                float err = 0;
+
+                for (int j = -WINDOW_SIZE; j <= WINDOW_SIZE; ++j)
+                {
+                    for (int k = -WINDOW_SIZE; k <= WINDOW_SIZE; ++k)
+                    {
+                        int leftPixel = left.at<uchar>(y + j, leftX + k);
+                        int rightPixel = right.at<uchar>(y + j, leftX + k - d);
+
+                        float diff = leftPixel - rightPixel;
+                        err += diff * diff;
+                    }
+                }
+
+                if (err < leftMinErr)
+                {
+                    leftMinErr = err;
+                    leftBestDisparity = d;
+                }
+            }
+
+            if (abs(rightBestDisparity - leftBestDisparity) <= SYMMETRIC_TOLERANCE)
+            {
+                previousDisparity = rightBestDisparity;
+                disparityMap.at<uchar>(y, x) = static_cast<uchar>(previousDisparity);
             }
         }
     }
@@ -124,154 +115,115 @@ cv::Mat getRightViewDisparityMap(const cv::Mat &leftImage, const cv::Mat &rightI
     return disparityMap;
 }
 
-cv::Mat getDisparityMap(const cv::Mat &image1, const cv::Mat &image2)
+void getParameters(ifstream &file, float &zPrime, float &dOx, float &Tx)
 {
-    cv::Mat disparityMap(image1.rows, image1.cols, CV_8U);
-
-    for (int y = 0; y < image1.rows; ++y)
+    string line;
+    while (getline(file, line))
     {
-        int previousBestDisparity = 0;
-        int previousX = -1;
-        for (int x = 0; x < image1.cols; ++x)
+        if (line.find("z'=") != std::string::npos)
         {
-            int bestDisparityLeft = 0;
-            float bestSumLeft = -FLT_MAX;
-
-            for (int d = MIN_DISPARITY; d <= MAX_DISPARITY; ++d) // CONTRAINTE LIMITE DE DISPARITE
+            size_t pos = line.find('=');
+            if (pos != std::string::npos)
             {
-                if (x - d < 0)
-                    continue;
-
-                float sum = 0;
-
-                for (int k = -WINDOW_SIZE; k <= WINDOW_SIZE; ++k)
-                {
-                    for (int j = -WINDOW_SIZE; j <= WINDOW_SIZE; ++j)
-                    {
-                        if (y + j < 0 || y + j >= image1.rows)
-                            continue;
-                        if (x + k < 0 || x + k >= image1.cols)
-                            continue;
-                        if (x + k - d < 0 || x + k - d >= image2.cols)
-                            continue;
-
-                        int pixelGNeighbor = image1.at<uchar>(y + j, x + k);
-                        int pixelDNeighbor = image2.at<uchar>(y + j, x + k - d);
-
-                        sum += -1.0f * (pixelGNeighbor - pixelDNeighbor) * (pixelGNeighbor - pixelDNeighbor);
-                    }
-                }
-
-                // CONTRAINTE DE SIMILARITE
-                if (sum > bestSumLeft)
-                {
-                    bestDisparityLeft = d;
-                    bestSumLeft = sum;
-                }
+                zPrime = std::stof(line.substr(pos + 1)); // convert substring to float
             }
-
-            int bestDisparityRight = 0;
-            float bestSumRight = -FLT_MAX;
-
-            for (int d = MIN_DISPARITY; d <= MAX_DISPARITY; ++d) // CONTRAINTE LIMITE DE DISPARITE
+        }
+        else if (line.find("dOx=") != std::string::npos)
+        {
+            size_t pos = line.find('=');
+            if (pos != std::string::npos)
             {
-                if (x - d < 0)
-                    continue;
-
-                float sum = 0;
-
-                for (int k = -WINDOW_SIZE; k <= WINDOW_SIZE; ++k)
-                {
-                    for (int j = -WINDOW_SIZE; j <= WINDOW_SIZE; ++j)
-                    {
-                        if (y + j < 0 || y + j >= image2.rows)
-                            continue;
-                        if (x + k < 0 || x + k >= image2.cols)
-                            continue;
-                        if (x + k - d < 0 || x + k - d >= image1.cols)
-                            continue;
-
-                        int pixelGNeighbor = image1.at<uchar>(y + j, x + k - d);
-                        int pixelDNeighbor = image2.at<uchar>(y + j, x + k);
-
-                        sum += -1.0f * (pixelDNeighbor - pixelGNeighbor) * (pixelDNeighbor - pixelGNeighbor);
-                    }
-                }
-
-                // CONTRAINTE DE SIMILARITE
-                if (sum > bestSumRight)
-                {
-                    bestDisparityRight = d;
-                    bestSumRight = sum;
-                }
+                dOx = std::stof(line.substr(pos + 1));
             }
-
-            // CONTRAINTE D'ORDRE
-            bool orderOk = true;
-
-            if (previousX != -1 && x > previousX)
+        }
+        else if (line.find("Tx=") != std::string::npos)
+        {
+            size_t pos = line.find('=');
+            if (pos != std::string::npos)
             {
-                int mappedPrev = previousX - previousBestDisparity;
-                int mappedCurr = x - bestDisparityLeft;
-
-                if (mappedCurr <= mappedPrev)
-                {
-                    // orderOk = false;
-                }
-            }
-
-            // CONTRAINTE DE SYMMETRIE
-            if (orderOk && abs(bestDisparityLeft - bestDisparityRight) <= SYMMETRIC_TOLERANCE)
-            {
-                disparityMap.at<uchar>(y, x) = static_cast<uchar>(bestDisparityLeft);
-                previousBestDisparity = bestDisparityLeft;
-                previousX = x;
+                Tx = std::stof(line.substr(pos + 1));
             }
         }
     }
-    return disparityMap;
+}
+
+cv::Mat getDepthMap(const cv::Mat &disparity, float zPrime, float dOx, float Tx)
+{
+    cv::Mat depthMap = cv::Mat::zeros(disparity.size(), CV_32F); // Float 32-bit
+
+    std::vector<cv::Vec3f> points;
+    for (int y = 0; y < disparity.rows; y++)
+    {
+        for (int x = 0; x < disparity.cols; x++)
+        {
+            float d = static_cast<float>(disparity.at<uchar>(y, x));
+            if (d != 0)
+            {
+                float z = (zPrime * Tx) / (d + dOx);
+
+                depthMap.at<float>(y, x) = z;
+                // renverse y pcq cv::viz a un repere avec un y axis vers le haut
+                // renverse z pour avoir les objets avec un petit z devant
+                // et les objets avec un grand z derriere
+                points.emplace_back(x, disparity.cols - y, -z);
+            }
+        }
+    }
+
+    cv::Mat cloudMat(points.size(), 1, CV_32FC3, points.data());
+
+    // Visualize
+    cv::viz::Viz3d window("Depth Visualization");
+    cv::viz::WCloud cloud(cloudMat, cv::viz::Color::green());
+    window.showWidget("cloud", cloud);
+    // window.spin();
+    /*
+    *
+    * 
+    * 
+    * DECOMMENTER LA LIGNE AU DESSUS POUR VOIR LA VISUALISATION
+    * 
+    *     
+    * 
+    */
+    return depthMap;
+}
+
+void writeDisparityAndDepthMap(string folderName)
+{
+    cv::Mat imageLeft = cv::imread("images/" + folderName + "/im0.png", cv::IMREAD_GRAYSCALE);
+    cv::Mat imageRight = cv::imread("images/" + folderName + "/im1.png", cv::IMREAD_GRAYSCALE);
+    std::ifstream parameters("images/" + folderName + "/calib.txt");
+
+    if (imageLeft.empty() || imageRight.empty() || !parameters.is_open())
+    {
+        cerr << "Error loading images!" << endl;
+        return;
+    }
+
+    float zPrime, dOx, Tx;
+    getParameters(parameters, zPrime, dOx, Tx);
+
+    cv::Mat disparity = getDisparityMap(imageLeft, imageRight);
+    cv::Mat depth = getDepthMap(disparity, zPrime, dOx, Tx);
+
+    cv::Mat normalizedDisparity;
+    normalize(disparity, normalizedDisparity, 0, 255, cv::NORM_MINMAX);
+
+    // la depth map reviens a linverse pomal de la disparity map quand est en png 2d.
+    // Pour la voir dans un petit visualisateur juste a aller decommenter la ligne dans le code plus haut
+    cv::Mat normalizedDepth;
+    normalize(depth, normalizedDepth, 0, 255, cv::NORM_MINMAX);
+
+    cv::imwrite("images/" + folderName + "/disparityMap.png", normalizedDisparity);
+    cv::imwrite("images/" + folderName + "/depthMap.png", normalizedDepth);
 }
 
 int main()
 {
-
-    cv::Mat imageG = cv::imread("images/Teddy/im0.png", cv::IMREAD_GRAYSCALE);
-    cv::Mat imageD = cv::imread("images/Teddy/im1.png", cv::IMREAD_GRAYSCALE);
-
-    if (imageG.empty() || imageD.empty())
-    {
-        cerr << "Error loading images!" << endl;
-        return -1;
-    }
-
-    // cv::Mat disparity = getRightViewDisparityMap(imageG, imageD);
-
-    cv::Mat disparity = getDisparityMap(imageG, imageD);
-
-    // cv::Mat disparitySymmetric(disparityG.rows, disparityG.cols, CV_8U, cv::Scalar(0));
-
-    // // CONTRAINTE DE SYMMETRIE
-    // for (int y = 0; y < disparitySymmetric.rows; y++)
-    // {
-    //     for (int x = 0; x < disparitySymmetric.cols; x++)
-    //     {
-    //         int d = disparityG.at<uchar>(y, x);
-    //         int xr = x - d;
-
-    //         if (xr >= 0 && xr < imageD.cols)
-    //         {
-    //             int dR = disparityD.at<uchar>(y, xr);
-    //             if (abs(d - dR) <= SYMMETRIC_TOLERANCE)
-    //             {
-    //                 disparitySymmetric.at<uchar>(y, x) = d;
-    //             }
-    //         }
-    //     }
-    // }
-
-    normalize(disparity, disparity, 0, 255, cv::NORM_MINMAX);
-
-    cv::imwrite("images/disparityMap.png", disparity);
-
+    writeDisparityAndDepthMap("Adirondack");
+    writeDisparityAndDepthMap("Playroom");
+    writeDisparityAndDepthMap("Teddy");
+    writeDisparityAndDepthMap("Vintage");
     return 0;
 }

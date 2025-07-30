@@ -96,6 +96,15 @@ cv::Mat getDisparityMap(const cv::Mat &left, const cv::Mat &right)
                         err += diff * diff;
                     }
                 }
+                
+                if (previousDisparity != -1)
+                {
+                    int discontinuity = abs(d - previousDisparity);
+                    if (discontinuity > CONTINUOUS_DISPARITY_TOLERANCE)
+                    {
+                        err += discontinuity * 100;
+                    }
+                }
 
                 if (err < leftMinErr)
                 {
@@ -176,7 +185,7 @@ cv::Mat getDepthMap(const cv::Mat &disparity, float zPrime, float dOx, float Tx)
     cv::viz::Viz3d window("Depth Visualization");
     cv::viz::WCloud cloud(cloudMat, cv::viz::Color::green());
     window.showWidget("cloud", cloud);
-    // window.spin();
+    window.spin();
     /*
     *
     * 

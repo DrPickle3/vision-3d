@@ -23,8 +23,6 @@ cv::Mat getDisparityMap(const cv::Mat &left, const cv::Mat &right)
 
     for (int y = WINDOW_SIZE; y < right.rows - WINDOW_SIZE; ++y)
     {
-        int previousDisparity = -1;
-
         for (int x = WINDOW_SIZE; x < right.cols - WINDOW_SIZE; ++x)
         {
             int rightBestDisparity = 0;
@@ -52,19 +50,61 @@ cv::Mat getDisparityMap(const cv::Mat &left, const cv::Mat &right)
                 }
 
                 // CONTRAINTE DE CONTINUITÉ
-                if (previousDisparity != -1)
+                int discontinuityLeft = -1;
+                int discontinuityTopLeft = -1;
+                int discontinuityTop = -1;
+                int discontinuityTopRight = -1;
+                if (y > 0)
                 {
-                    int discontinuity = abs(d - previousDisparity);
-                    if (discontinuity > CONTINUOUS_DISPARITY_TOLERANCE)
+                    discontinuityTop = abs(d - disparityMap.at<uchar>(y - 1, x));
+                    if (x < right.cols - 1)
                     {
-                        err += discontinuity * 100;
+                        discontinuityTopRight = abs(d - disparityMap.at<uchar>(y - 1, x + 1));
                     }
+                    if (x > 0)
+                    {
+                        discontinuityTopLeft = abs(d - disparityMap.at<uchar>(y - 1, x - 1));
+                    }
+                }
+                if (x > 0)
+                {
+                    discontinuityLeft = abs(d - disparityMap.at<uchar>(y, x - 1));
+                }
+
+                if (discontinuityLeft > CONTINUOUS_DISPARITY_TOLERANCE)
+                {
+                    err += discontinuityLeft * 100;
+                }
+                else if (discontinuityTop > CONTINUOUS_DISPARITY_TOLERANCE)
+                {
+                    err += discontinuityTop * 100;
+                }
+                else if (discontinuityTopLeft > CONTINUOUS_DISPARITY_TOLERANCE)
+                {
+                    err += discontinuityTopLeft * 100;
+                }
+                else if (discontinuityTopRight > CONTINUOUS_DISPARITY_TOLERANCE)
+                {
+                    err += discontinuityTopRight * 100;
                 }
 
                 if (err < minRightErr) // On minimise l'erreur
                 {
-                    minRightErr = err;
-                    rightBestDisparity = d;
+                    // CONTRAINTE D'ORDRE
+                    bool ordreRespecter = true;
+                    if (x > 0)
+                    {
+                        int previousDisparity = static_cast<int>(disparityMap.at<uchar>(y, x - 1));
+                        if (x + previousDisparity - 1 > x + d)
+                        {
+                            ordreRespecter = false;
+                        }
+                    }
+                    if (ordreRespecter)
+                    {
+                        minRightErr = err;
+                        rightBestDisparity = d;
+                    }
                 }
             }
 
@@ -96,27 +136,69 @@ cv::Mat getDisparityMap(const cv::Mat &left, const cv::Mat &right)
                         err += diff * diff;
                     }
                 }
-                
-                if (previousDisparity != -1)
+
+                // CONTRAINTE DE CONTINUITÉ
+                int discontinuityLeft = -1;
+                int discontinuityTopLeft = -1;
+                int discontinuityTop = -1;
+                int discontinuityTopRight = -1;
+                if (y > 0)
                 {
-                    int discontinuity = abs(d - previousDisparity);
-                    if (discontinuity > CONTINUOUS_DISPARITY_TOLERANCE)
+                    discontinuityTop = abs(d - disparityMap.at<uchar>(y - 1, x));
+                    if (x < left.cols - 1)
                     {
-                        err += discontinuity * 100;
+                        discontinuityTopRight = abs(d - disparityMap.at<uchar>(y - 1, x + 1));
                     }
+                    if (x > 0)
+                    {
+                        discontinuityTopLeft = abs(d - disparityMap.at<uchar>(y - 1, x - 1));
+                    }
+                }
+                if (x > 0)
+                {
+                    discontinuityLeft = abs(d - disparityMap.at<uchar>(y, x - 1));
+                }
+
+                if (discontinuityLeft > CONTINUOUS_DISPARITY_TOLERANCE)
+                {
+                    err += discontinuityLeft * 100;
+                }
+                else if (discontinuityTop > CONTINUOUS_DISPARITY_TOLERANCE)
+                {
+                    err += discontinuityTop * 100;
+                }
+                else if (discontinuityTopLeft > CONTINUOUS_DISPARITY_TOLERANCE)
+                {
+                    err += discontinuityTopLeft * 100;
+                }
+                else if (discontinuityTopRight > CONTINUOUS_DISPARITY_TOLERANCE)
+                {
+                    err += discontinuityTopRight * 100;
                 }
 
                 if (err < leftMinErr)
                 {
-                    leftMinErr = err;
-                    leftBestDisparity = d;
+                    // CONTRAINTE D'ORDRE
+                    bool ordreRespecter = true;
+                    if (x > 0)
+                    {
+                        int previousDisparity = static_cast<int>(disparityMap.at<uchar>(y, x - 1));
+                        if (x + previousDisparity - 1 > x + d)
+                        {
+                            ordreRespecter = false;
+                        }
+                    }
+                    if (ordreRespecter)
+                    {
+                        leftMinErr = err;
+                        leftBestDisparity = d;
+                    }
                 }
             }
 
             if (abs(rightBestDisparity - leftBestDisparity) <= SYMMETRIC_TOLERANCE)
             {
-                previousDisparity = rightBestDisparity;
-                disparityMap.at<uchar>(y, x) = static_cast<uchar>(previousDisparity);
+                disparityMap.at<uchar>(y, x) = static_cast<uchar>(rightBestDisparity);
             }
         }
     }
@@ -187,14 +269,14 @@ cv::Mat getDepthMap(const cv::Mat &disparity, float zPrime, float dOx, float Tx)
     window.showWidget("cloud", cloud);
     window.spin();
     /*
-    *
-    * 
-    * 
-    * DECOMMENTER LA LIGNE AU DESSUS POUR VOIR LA VISUALISATION
-    * 
-    *     
-    * 
-    */
+     *
+     *
+     *
+     * DECOMMENTER LA LIGNE AU DESSUS POUR VOIR LA VISUALISATION
+     *
+     *
+     *
+     */
     return depthMap;
 }
 

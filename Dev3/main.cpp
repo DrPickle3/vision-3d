@@ -7,7 +7,7 @@ using namespace std;
 // Corrélation locale simple avec SSD (Sum of Squared Differences)
 // tailleFenetre : similitude
 // maxDisparite  : limite de la disparité
-Mat correlationSSD(const Mat &gauche, const Mat &droite, int tailleFenetre, int maxDisparite)
+Mat correlationSSD(const Mat& gauche, const Mat& droite, int tailleFenetre, int maxDisparite)
 {
     int numberOfRows = gauche.rows;
     int numberOfColumns = gauche.cols;
@@ -18,14 +18,24 @@ Mat correlationSSD(const Mat &gauche, const Mat &droite, int tailleFenetre, int 
 
     for (int y = halfWindow; y < numberOfRows - halfWindow; ++y)
     {
-        for (int x = halfWindow + maxDisparite; x < numberOfColumns - halfWindow; ++x)
+        for (int x = halfWindow; x < numberOfColumns - halfWindow; ++x)
         {
             int meilleureDisparite = 0;
             double meilleurSSD = DBL_MAX;
 
+            // Contrainte ordre
+            // On vérifie la disparité précédente pour éviter les sauts importants
+            int disparitePrecedente = (x > halfWindow) ? img_disparite.at<uchar>(y, x - 1) : -1;
+
             for (int disp = 0; disp <= maxDisparite; ++disp)
             {
+                // Contrainte d'ordre
+                // Appliquer la contrainte d'ordre uniquement si on a une disparité précédente
+                if (disparitePrecedente >= 0 && disp > disparitePrecedente + 4) // tolérance de 4
+                    continue;
+
                 int xDroiteDecalee = x - disp;
+                // Vérification des limites de l'image droite
                 if (xDroiteDecalee - halfWindow < 0)
                     continue;
 
@@ -48,15 +58,16 @@ Mat correlationSSD(const Mat &gauche, const Mat &droite, int tailleFenetre, int 
                     meilleureDisparite = disp;
                 }
             }
-
-            // Normalisation de la disparité pour l'affichage
-            img_disparite.at<uchar>(y, x) = static_cast<uchar>(meilleureDisparite * 255 / maxDisparite);
+            img_disparite.at<uchar>(y, x) = static_cast<uchar>(meilleureDisparite);
         }
     }
 
     return img_disparite;
 }
 
+
+// tailleFenetre : similitude
+// maxDisparite  : limite de la disparité
 int main()
 {
     Mat imageG = imread("images/im0.png", IMREAD_GRAYSCALE);
@@ -75,22 +86,17 @@ int main()
     }
 
     int tailleFenetre = 5;
-
-    // Seulement contrainte de similitude
     int maxDisparite = 64;
-    Mat carteDisparite = correlationSSD(imageG, imageD, tailleFenetre, maxDisparite);
-    imwrite("./images/carte_disparite_similitude.png", carteDisparite);
+
+    Mat resultat = correlationSSD(imageG, imageD, tailleFenetre, maxDisparite);
+
+    // Seulement contrainte de similitude + limite de la disparité
+    Mat carteDisparite;
+    resultat.convertTo(carteDisparite, CV_8U, 255.0 / maxDisparite);
+    imwrite("./images/carte_disparite_similitude+limite.png", carteDisparite);
     waitKey(10);
 
-    // pour contrainte de limite de la disparité
-    // int tailleFenetre = 5;
 
-    for (int i = 0; i < imageG.rows; i++)
-    {
-        for (int j = 0; j < imageG.cols; j++)
-        {
-        }
-    }
 
     cout << "Hello World!" << endl;
     return 0;
